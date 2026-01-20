@@ -1,9 +1,9 @@
-import { login } from "./api.js";
-import { haveToken } from "./tokenValidation.js";
+import { login } from "./src/api.js";
+import { haveToken } from "./src/tokenValidation.js";
 
 // Redirige a la página principal si ya hay un token válido
 if (haveToken()) {
-  window.location.href = "pages/core.html";
+  window.location.href = "src/pages/core.html";
 }
 
 function LoginHandler(event) {
@@ -19,7 +19,7 @@ function LoginHandler(event) {
       const { access_token } = response.data;
       localStorage.setItem("access_token", access_token);
       alert("Login successful!");
-      window.location.href = "pages/core.html";
+      window.location.href = "src/pages/core.html";
     })
     .catch((error) => {
       console.error("Login error:", error);

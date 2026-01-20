@@ -26,7 +26,7 @@ export const logout = () => {
 
 // CRUD genérico
 export const listResource = (resource, params) =>
-  api.get(`/${resource}`, { params });
+  api.get(`/${resource}/all`, { params });
 export const getResource = (resource, id) => api.get(`/${resource}/${id}`);
 export const createResource = (resource, data) =>
   api.post(`/${resource}`, data);

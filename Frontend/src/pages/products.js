@@ -1,17 +1,11 @@
-export const ProductsInterface = {
-  template: `
-    <h2>Gestión de Productos</h2>
-    <div>
-      <button id="load-products-btn">Cargar Productos</button>
-        <ul id="products-list"></ul>
-    </div>
-  `,
-  setup() {
-    document
-      .getElementById("load-products-btn")
-      .addEventListener("click", () => {
-        // Lógica para cargar y mostrar productos
-        alert("Cargando productos...");
-      });
-  },
-};
+import { createCrudPage } from "./resourceCrud.js";
+
+export const ProductsInterface = createCrudPage({
+  title: "Gestión de Productos",
+  resource: "productos",
+  fields: [
+    { name: "codigo", label: "Código" },
+    { name: "nombre", label: "Nombre" },
+    { name: "es_ave_viva", label: "Ave Viva", type: "checkbox" },
+  ],
+});

@@ -133,3 +133,50 @@ def bulk_resources():
         }
 
     return jsonify(result)
+
+@api_bp.route("/<resource>/<int:id_>", methods=["GET"])
+@jwt_required()
+def get_resource(resource, id_):
+    model = MODEL_MAP.get(resource)
+    if not model:
+        return jsonify({"error": "Recurso no encontrado"}), 404
+    obj = model.query.get_or_404(id_)
+    return jsonify(serialize(obj))
+
+@api_bp.route("/<resource>", methods=["POST"])
+@jwt_required()
+def create_resource(resource):
+    model = MODEL_MAP.get(resource)
+    if not model:
+        return jsonify({"error": "Recurso no encontrado"}), 404
+    data = request.get_json(force=True) or {}
+    ok, err = validate_payload(model, data, partial=False)
+    if not ok:
+        return jsonify({"error": err}), 400
+    service = CRUDService(model)
+    obj = service.create(data)
+    return jsonify(serialize(obj)), 201
+
+@api_bp.route("/<resource>/<int:id_>", methods=["PUT"])
+@jwt_required()
+def update_resource(resource, id_):
+    model = MODEL_MAP.get(resource)
+    if not model:
+        return jsonify({"error": "Recurso no encontrado"}), 404
+    data = request.get_json(force=True) or {}
+    ok, err = validate_payload(model, data, partial=True)
+    if not ok:
+        return jsonify({"error": err}), 400
+    service = CRUDService(model)
+    obj = service.update(id_, data)
+    return jsonify(serialize(obj))
+
+@api_bp.route("/<resource>/<int:id_>", methods=["DELETE"])
+@jwt_required()
+def delete_resource(resource, id_):
+    model = MODEL_MAP.get(resource)
+    if not model:
+        return jsonify({"error": "Recurso no encontrado"}), 404
+    service = CRUDService(model)
+    obj = service.delete(id_)
+    return jsonify(serialize(obj))
