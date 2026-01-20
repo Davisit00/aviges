@@ -1,11 +1,4 @@
 import { createCrudPage } from "./resourceCrud.js";
+import { resourceConfigs } from "./resourceConfigs.js";
 
-export const ProductsInterface = createCrudPage({
-  title: "Gestión de Productos",
-  resource: "productos",
-  fields: [
-    { name: "codigo", label: "Código" },
-    { name: "nombre", label: "Nombre" },
-    { name: "es_ave_viva", label: "Ave Viva", type: "checkbox" },
-  ],
-});
+export const ProductsInterface = createCrudPage(resourceConfigs.productos);

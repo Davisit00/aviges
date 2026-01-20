@@ -3,7 +3,6 @@ export const resourceConfigs = {
     title: "Gestión de Usuarios",
     resource: "usuarios",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "nombre_usuario", label: "Usuario" },
       { name: "contrasena_hash", label: "Contraseña", type: "password" },
       { name: "nombre", label: "Nombre" },
@@ -12,11 +11,19 @@ export const resourceConfigs = {
       { name: "fecha_creacion", label: "Fecha", readOnly: true },
     ],
   },
+  productos: {
+    title: "Gestión de Productos",
+    resource: "productos",
+    fields: [
+      { name: "codigo", label: "Código" },
+      { name: "nombre", label: "Nombre" },
+      { name: "es_ave_viva", label: "Ave Viva", type: "checkbox" },
+    ],
+  },
   empresas_transporte: {
     title: "Empresas de Transporte",
     resource: "empresas_transporte",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "nombre", label: "Nombre" },
       { name: "rif", label: "RIF" },
     ],
@@ -25,7 +32,6 @@ export const resourceConfigs = {
     title: "Gestión de Granjas",
     resource: "granjas",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "nombre", label: "Nombre" },
       { name: "direccion", label: "Dirección" },
       { name: "dueno", label: "Dueño" },
@@ -35,7 +41,6 @@ export const resourceConfigs = {
     title: "Gestión de Galpones",
     resource: "galpones",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "id_granja", label: "ID Granja" },
       { name: "codigo", label: "Código" },
       { name: "capacidad", label: "Capacidad", type: "number" },
@@ -45,7 +50,6 @@ export const resourceConfigs = {
     title: "Gestión de Vehículos",
     resource: "vehiculos",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "placa", label: "Placa" },
       { name: "descripcion", label: "Descripción" },
       { name: "id_empresa_transporte", label: "ID Empresa Transporte" },
@@ -56,7 +60,6 @@ export const resourceConfigs = {
     title: "Gestión de Choferes",
     resource: "choferes",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "cedula", label: "Cédula" },
       { name: "nombre", label: "Nombre" },
       { name: "apellido", label: "Apellido" },
@@ -66,16 +69,12 @@ export const resourceConfigs = {
   tickets_pesaje: {
     title: "Tickets de Pesaje",
     resource: "tickets_pesaje",
-    fields: [
-      { name: "id", label: "ID", readOnly: true },
-      { name: "nro_ticket", label: "Nro Ticket" },
-    ],
+    fields: [{ name: "nro_ticket", label: "Nro Ticket" }],
   },
   detalles_transporte_aves: {
     title: "Detalles Transporte Aves",
     resource: "detalles_transporte_aves",
     fields: [
-      { name: "id", label: "ID", readOnly: true },
       { name: "id_ticket_pesaje", label: "ID Ticket" },
       { name: "id_granja", label: "ID Granja" },
       { name: "id_galpon", label: "ID Galpón" },
