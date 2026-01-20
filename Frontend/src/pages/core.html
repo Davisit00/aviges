@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Document</title>
+        <script src="../node_modules/axios/dist/axios.min.js"></script>
+        <script type="module">
+            import { validateAndRedirect } from "../tokenValidation.js";
+            validateAndRedirect();
+        </script>
+        <link rel="stylesheet" href="core.css">
+    </head>
+    <body>
+        <div class="main-menu">
+            <h2>Pagina principal</h2>
+            <ul>
+                <li><button id="products-button">Productos</button></li>
+                <li><button id="vehicles-button">Vehículos</button></li>
+                <li><button id="drivers-button">Choferes</button></li>
+                <li><button id="transport-companies-button">Empresas de
+                        transporte</button></li>
+                <li><button id="farms-button">Granjas</button></li>
+                <li><button id="barns-button">Galpones</button></li>
+                <li><button id="users-button">Usuarios</button></li>
+            </ul>
+            <button id="logout-button">Cerrar sesión</button>
+
+        </div>
+        <div id="content-container"></div>
+        <script src="core.js" type="module"></script>
+    </body>
+</html>
