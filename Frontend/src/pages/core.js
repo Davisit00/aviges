@@ -22,6 +22,30 @@ const ticketsButton = document.getElementById("tickets-button");
 const avesDetailsButton = document.getElementById("aves-details-button");
 const logoutButton = document.getElementById("logout-button");
 
+// INICIO FUNCIONALIDAD MENUS DESPLEGABLES
+const maintenanceDeployButton = document.getElementById(
+  "maintenance-deploy-button",
+);
+const processDeployButton = document.getElementById("process-deploy-button");
+const reportsDeployButton = document.getElementById("reports-deploy-button");
+
+const maintenanceMenuList = document.getElementById("maintenance-menu-list");
+const processMenuList = document.getElementById("process-menu-list");
+const reportsMenuList = document.getElementById("reports-menu-list");
+
+maintenanceDeployButton.addEventListener("click", () => {
+  maintenanceMenuList.classList.toggle("show-menu");
+});
+
+processDeployButton.addEventListener("click", () => {
+  processMenuList.classList.toggle("show-menu");
+});
+
+reportsDeployButton.addEventListener("click", () => {
+  reportsMenuList.classList.toggle("show-menu");
+});
+// FIN FUNCIONALIDAD MENUS DESPLEGABLES
+
 function render(template, node) {
   if (!node) return;
   node.innerHTML = template;

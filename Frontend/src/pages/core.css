@@ -1,3 +1,9 @@
+/*
+#FE0710 
+#FFB801
+#003B73
+*/
+
 * {
   box-sizing: border-box;
   font-family: Helvetica, Arial, sans-serif;
@@ -22,6 +28,7 @@ body {
   justify-content: center;
   padding: 0 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
 }
 
 #content-container {
@@ -42,7 +49,7 @@ ul {
   margin: 5px 0;
   background-color: #555;
   color: white;
-  border: none;
+  border: 1px solid cornflowerblue;
   border-radius: 4px;
   cursor: pointer;
 }
@@ -55,4 +62,37 @@ ul {
 }
 #logout-button:hover {
   background-color: #cc5555;
+}
+
+#maintenance-menu-list,
+#process-menu-list,
+#reports-menu-list {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 10px;
+}
+
+#maintenance-menu-list.show-menu,
+#process-menu-list.show-menu,
+#reports-menu-list.show-menu {
+  display: flex;
+}
+#maintenance-deploy-button,
+#process-deploy-button,
+#reports-deploy-button {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#maintenance-deploy-button:hover,
+#process-deploy-button:hover,
+#reports-deploy-button:hover {
+  background-color: #777;
 }

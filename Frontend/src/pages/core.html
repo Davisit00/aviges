@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Document</title>
-        <script src="../../node_modules/axios/dist/axios.min.js"></script>
-        <script type="module">
+        <head>
+                <meta charset="UTF-8">
+                <meta name="viewport"
+                        content="width=device-width, initial-scale=1.0">
+                <title>Document</title>
+                <script
+                        src="../../node_modules/axios/dist/axios.min.js"></script>
+                <script type="module">
             import { validateAndRedirect } from "../tokenValidation.js";
             validateAndRedirect();
             // Previene que el usuario use el botón de retroceso del navegador
@@ -19,39 +21,57 @@
             // window.location.href = '../../index.html';
         });
         </script>
-        <link rel="stylesheet" href="core.css">
-        <link rel="stylesheet" href="../styles/crud.css">
-    </head>
-    <body>
-        <div class="main-menu">
-            <h2>Pagina principal</h2>
-            <ul>
-                <li><button class="menu-button"
-                        id="products-button">Productos</button></li>
-                <li><button class="menu-button"
-                        id="vehicles-button">Vehículos</button></li>
-                <li><button class="menu-button"
-                        id="drivers-button">Choferes</button></li>
-                <li><button class="menu-button"
-                        id="transport-companies-button">Empresas de
-                        transporte</button></li>
-                <li><button class="menu-button"
-                        id="farms-button">Granjas</button></li>
-                <li><button class="menu-button"
-                        id="barns-button">Galpones</button></li>
-                <li><button class="menu-button"
-                        id="users-button">Usuarios</button></li>
-                <li><button class="menu-button"
-                        id="tickets-button">Tickets</button></li>
-                <li><button class="menu-button"
-                        id="aves-details-button">Detalles de
-                        aves</button></li>
-            </ul>
-            <button class="menu-button" id="logout-button">Cerrar
-                sesión</button>
+                <link rel="stylesheet" href="core.css">
+                <link rel="stylesheet" href="../styles/crud.css">
+        </head>
+        <body>
+                <div class="main-menu">
+                        <h2>Pagina principal</h2>
+                        <button
+                                id="maintenance-deploy-button">Mantenimiento</button>
+                        <ul id="maintenance-menu-list">
+                                <li><button class="menu-button"
+                                                id="products-button">Productos</button></li>
+                                <li><button class="menu-button"
+                                                id="vehicles-button">Vehículos</button></li>
+                                <li><button class="menu-button"
+                                                id="drivers-button">Choferes</button></li>
+                                <li><button class="menu-button"
+                                                id="transport-companies-button">Empresas
+                                                de
+                                                transporte</button></li>
+                                <li><button class="menu-button"
+                                                id="farms-button">Granjas</button></li>
+                                <li><button class="menu-button"
+                                                id="barns-button">Galpones</button></li>
+                                <li><button class="menu-button"
+                                                id="users-button">Usuarios</button></li>
+                                <li><button class="menu-button"
+                                                id="tickets-button">Tickets</button></li>
+                                <li><button class="menu-button"
+                                                id="aves-details-button">Detalles
+                                                de
+                                                aves</button></li>
+                        </ul>
+                        <button id="process-deploy-button">Procesos</button>
+                        <ul id="process-menu-list">
+                                <li><button id="weigh-button"
+                                                class="menu-button">Pesado</button></li>
+                        </ul>
+                        <button id="reports-deploy-button">Reportes</button>
+                        <ul id="reports-menu-list">
+                                <li><button id="ticket-print-button"
+                                                class="menu-button">Reimprimir
+                                                Ticket</button></li>
+                                <li><button id="weigh-relationship-button"
+                                                class="menu-button">Relación de
+                                                Pesadas</button></li>
+                        </ul>
+                        <button class="menu-button" id="logout-button">Cerrar
+                                sesión</button>
 
-        </div>
-        <div id="content-container"></div>
-        <script src="core.js" type="module"></script>
-    </body>
+                </div>
+                <div id="content-container"></div>
+                <script src="core.js" type="module"></script>
+        </body>
 </html>
