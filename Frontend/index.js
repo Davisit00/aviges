@@ -2,9 +2,11 @@ import { login } from "./src/api.js";
 import { haveToken } from "./src/tokenValidation.js";
 
 // Redirige a la página principal si ya hay un token válido
-if (haveToken()) {
-  window.location.href = "src/pages/core.html";
-}
+haveToken().then((valid) => {
+  if (valid) {
+    window.location.href = "src/pages/core.html";
+  }
+});
 
 function LoginHandler(event) {
   event.preventDefault();

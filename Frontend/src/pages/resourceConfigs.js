@@ -4,7 +4,6 @@ export const resourceConfigs = {
     resource: "usuarios",
     fields: [
       { name: "nombre_usuario", label: "Usuario" },
-      { name: "contrasena_hash", label: "Contraseña", type: "password" },
       { name: "nombre", label: "Nombre" },
       { name: "apellido", label: "Apellido" },
       { name: "rol", label: "Rol" },

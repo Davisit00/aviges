@@ -10,13 +10,20 @@ export function validateAndRedirect() {
       })
       .catch((error) => {
         console.error("Token validation failed:", error);
-        window.location.href = "../index.html";
+        window.location.href = "../../index.html";
         alert("Session expired. Please log in again.");
       });
   });
 }
 
-export function haveToken() {
+export async function haveToken() {
   const token = localStorage.getItem("access_token");
-  return !!token;
+  if (!token) return false;
+
+  try {
+    await validateToken();
+    return true;
+  } catch (error) {
+    return false;
+  }
 }
