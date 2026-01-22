@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from .models import (
-    Usuarios, EmpresasTransporte, Granjas, Productos, Galpones,
+    Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
     Vehiculos, Choferes, TicketsPesaje, DetallesTransporteAves
 )
 from .services.crud import CRUDService
@@ -11,8 +11,16 @@ from .jwt_blocklist import jwt_blocklist
 
 api_bp = Blueprint("api", __name__)
 
+@api_bp.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 MODEL_MAP = { 
     "usuarios": Usuarios,
+    "roles": Roles,
     "empresas_transporte": EmpresasTransporte,
     "granjas": Granjas,
     "productos": Productos,
@@ -39,7 +47,8 @@ def login():
     if not user or not check_password_hash(user.contrasena_hash, contrasena):
         return jsonify({"error": "Credenciales inválidas"}), 401
 
-    token = create_access_token(identity=str(user.id))
+    # Incluimos el id_rol en los claims del token
+    token = create_access_token(identity=str(user.id), additional_claims={"id_rol": user.id_rol})
     return jsonify({"access_token": token})
 
 @api_bp.route("/auth/register", methods=["POST"])
@@ -48,7 +57,9 @@ def register():
     if "contrasena" not in data:
         return jsonify({"error": "contrasena es requerida"}), 400
 
+    # CAMBIO: Usar la clave correcta del modelo (contrasena_hash)
     data["contrasena_hash"] = generate_password_hash(data.pop("contrasena"))
+    
     ok, err = validate_payload(Usuarios, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
@@ -61,7 +72,8 @@ def register():
 @jwt_required()
 def validate_token():
     user_id = get_jwt_identity()
-    return jsonify({"valid": True, "user_id": user_id})
+    user_rol= get_jwt().get("id_rol")
+    return jsonify({"valid": True, "user_id": user_id, "user_rol": user_rol})
 
 @api_bp.route("/auth/logout", methods=["POST"])
 @jwt_required()
@@ -150,6 +162,11 @@ def create_resource(resource):
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
+
+    # CAMBIO: Manejo especial para usuarios (hashear contraseña)
+    if resource == "usuarios" and "contrasena" in data:
+        data["contrasena_hash"] = generate_password_hash(data.pop("contrasena"))
+
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
@@ -164,6 +181,14 @@ def update_resource(resource, id_):
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
+
+    # CAMBIO: Manejo especial para usuarios
+    if resource == "usuarios" and "contrasena" in data:
+        pwd = data.pop("contrasena") # Sacamos el campo raw
+        if pwd: # Solo si escribió algo lo hasheamos y agregamos al payload
+            data["contrasena_hash"] = generate_password_hash(pwd)
+        # Si pwd está vacío (ej. al editar sin cambiar pass), se eliminó y no se actualiza
+
     ok, err = validate_payload(model, data, partial=True)
     if not ok:
         return jsonify({"error": err}), 400

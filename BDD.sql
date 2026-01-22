@@ -1,4 +1,4 @@
--- CREACI�N DE LA BASE DE DATOS
+-- CREACIN DE LA BASE DE DATOS
 CREATE DATABASE GestionRomanaAvicola;
 GO
 
@@ -9,24 +9,38 @@ GO
 -- 1. SEGURIDAD Y ACCESO
 -- =============================================
 
-CREATE TABLE Usuarios (
+CREATE TABLE Roles (
     id INT PRIMARY KEY IDENTITY(1,1),
-    nombre_usuario VARCHAR(50) NOT NULL UNIQUE,
-    contrasena_hash VARCHAR(255) NOT NULL, -- Hash largo para seguridad
-    nombre_completo VARCHAR(100) NOT NULL,
-    rol VARCHAR(20) CHECK (rol IN ('Admin', 'Operador', 'Auditor')), -- Validaci�n simple
+    nombre VARCHAR(50) NOT NULL UNIQUE,
     fecha_creacion DATETIME2 DEFAULT GETDATE()
 );
 GO
 
+-- Insertar roles predeterminados
+INSERT INTO Roles (nombre) VALUES ('Admin'), ('Romanero');
+GO
+
+CREATE TABLE Usuarios (
+    id INT PRIMARY KEY IDENTITY(1,1),
+    nombre_usuario VARCHAR(50) NOT NULL UNIQUE,
+    contrasena_hash VARCHAR(255) NOT NULL, 
+    nombre VARCHAR(50) NOT NULL,
+    apellido VARCHAR(50) NOT NULL,
+    id_rol INT NOT NULL,
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
+    CONSTRAINT FK_Usuarios_Roles FOREIGN KEY (id_rol) REFERENCES Roles(id)
+);
+GO
+
 -- =============================================
--- 2. CAT�LOGOS (Datos Maestros)
+-- 2. CATLOGOS (Datos Maestros)
 -- =============================================
 
 CREATE TABLE Empresas_Transporte (
     id INT PRIMARY KEY IDENTITY(1,1),
     nombre VARCHAR(100) NOT NULL,
-    rif VARCHAR(20)
+    rif VARCHAR(20),
+    fecha_creacion DATETIME2 DEFAULT GETDATE()
 );
 GO
 
@@ -34,7 +48,8 @@ CREATE TABLE Granjas (
     id INT PRIMARY KEY IDENTITY(1,1),
     nombre VARCHAR(100) NOT NULL,
     direccion VARCHAR(200),
-    dueno VARCHAR(100)
+    dueno VARCHAR(100),
+    fecha_creacion DATETIME2 DEFAULT GETDATE()
 );
 GO
 
@@ -42,17 +57,19 @@ CREATE TABLE Productos (
     id INT PRIMARY KEY IDENTITY(1,1),
     codigo VARCHAR(20) NOT NULL UNIQUE,
     nombre VARCHAR(100) NOT NULL,
-    es_ave_viva BIT DEFAULT 0 -- 1 = S�, 0 = No (Para activar pesta�as extra)
+    es_ave_viva BIT DEFAULT 0, -- 1 = S, 0 = No
+    fecha_creacion DATETIME2 DEFAULT GETDATE()
 );
 GO
 
--- Tablas dependientes de cat�logos
+-- Tablas dependientes de catlogos
 
 CREATE TABLE Galpones (
     id INT PRIMARY KEY IDENTITY(1,1),
     id_granja INT NOT NULL,
     codigo VARCHAR(20) NOT NULL, -- Ej: 'G-01'
     capacidad INT,
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
     CONSTRAINT FK_Galpones_Granjas FOREIGN KEY (id_granja) REFERENCES Granjas(id)
 );
 GO
@@ -62,7 +79,8 @@ CREATE TABLE Vehiculos (
     placa VARCHAR(20) NOT NULL UNIQUE,
     descripcion VARCHAR(100), -- Ej: Aves vivas, Alimento
     id_empresa_transporte INT,
-    peso_tara DECIMAL(18, 2) DEFAULT 0.00, -- Tara predeterminada
+    peso_tara DECIMAL(18, 2) DEFAULT 0.00,
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
     CONSTRAINT FK_Vehiculos_Empresas FOREIGN KEY (id_empresa_transporte) REFERENCES Empresas_Transporte(id)
 );
 GO
@@ -70,8 +88,10 @@ GO
 CREATE TABLE Choferes (
     id INT PRIMARY KEY IDENTITY(1,1),
     cedula VARCHAR(20) NOT NULL UNIQUE,
-    nombre_completo VARCHAR(100) NOT NULL,
+    nombre VARCHAR(50) NOT NULL,
+    apellido VARCHAR(50) NOT NULL,
     id_empresa_transporte INT, -- Opcional
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
     CONSTRAINT FK_Choferes_Empresas FOREIGN KEY (id_empresa_transporte) REFERENCES Empresas_Transporte(id)
 );
 GO
@@ -82,24 +102,24 @@ GO
 
 CREATE TABLE Tickets_Pesaje (
     id INT PRIMARY KEY IDENTITY(1,1),
-    nro_ticket VARCHAR(50) NOT NULL UNIQUE, -- Identificador f�sico o impreso
+    nro_ticket VARCHAR(50) NOT NULL UNIQUE, -- Identificador fsico o impreso
     tipo_proceso VARCHAR(10) CHECK (tipo_proceso IN ('Entrada', 'Salida')),
     
     -- Relaciones
     id_vehiculo INT NOT NULL,
     id_chofer INT NOT NULL,
     id_producto INT NOT NULL,
-    id_usuario INT NOT NULL, -- Auditor�a de quien cre�
+    id_usuario INT NOT NULL, -- Auditora de quien cre
     
-    -- Datos Num�ricos
-    peso_bruto DECIMAL(18, 2) NOT NULL, -- Peso Total M�quina
-    peso_tara DECIMAL(18, 2) NOT NULL,  -- Peso Vac�o
-    peso_neto AS (peso_bruto - peso_tara), -- CAMPO CALCULADO AUTOM�TICO
-    peso_avisado DECIMAL(18, 2),        -- Seg�n Gu�a
+    -- Datos Numricos
+    peso_bruto DECIMAL(18, 2) NOT NULL, -- Peso Total Mquina
+    peso_tara DECIMAL(18, 2) NOT NULL,  -- Peso Vaco
+    peso_neto AS (peso_bruto - peso_tara), -- CAMPO CALCULADO AUTOMTICO
+    peso_avisado DECIMAL(18, 2),        -- Segn Gua
     cantidad_cestas INT DEFAULT 0,
     
-    -- Auditor�a
-    fecha_registro DATETIME2 DEFAULT GETDATE(),
+    -- Auditora
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
     estado VARCHAR(20) DEFAULT 'Activo', -- Activo / Anulado
     
     -- Constraints FK
@@ -111,12 +131,12 @@ CREATE TABLE Tickets_Pesaje (
 GO
 
 -- =============================================
--- 4. EXTENSI�N AV�COLA (Datos de los Excels)
+-- 4. EXTENSIN AVCOLA (Datos de los Excels)
 -- =============================================
 
 CREATE TABLE Detalles_Transporte_Aves (
     id INT PRIMARY KEY IDENTITY(1,1),
-    id_ticket_pesaje INT NOT NULL UNIQUE, -- Relaci�n 1 a 1 obligatoria
+    id_ticket_pesaje INT NOT NULL UNIQUE, -- Relacin 1 a 1 obligatoria
     
     -- Origen
     id_granja INT NOT NULL,
@@ -136,6 +156,9 @@ CREATE TABLE Detalles_Transporte_Aves (
     aves_ahogadas_aho INT DEFAULT 0,  -- Muertas
     aves_por_cesta INT,               -- Promedio
     
+    -- Auditora
+    fecha_creacion DATETIME2 DEFAULT GETDATE(),
+
     -- Constraints FK
     CONSTRAINT FK_Detalles_Tickets FOREIGN KEY (id_ticket_pesaje) REFERENCES Tickets_Pesaje(id),
     CONSTRAINT FK_Detalles_Granjas FOREIGN KEY (id_granja) REFERENCES Granjas(id),
@@ -188,6 +211,7 @@ BEGIN
         END
 
         -- 2. Insertar Ticket Cabecera
+        -- Nota: fecha_creacion se llena sola con GETDATE()
         INSERT INTO Tickets_Pesaje (
             nro_ticket, tipo_proceso, id_vehiculo, id_chofer, id_producto,
             id_usuario, peso_bruto, peso_tara, peso_avisado, cantidad_cestas

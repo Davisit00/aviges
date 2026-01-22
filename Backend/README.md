@@ -93,7 +93,7 @@ Content-Type: application/json
   "contrasena": "123456",
   "nombre": "Admin",
   "apellido": "Principal",
-  "rol": "Admin"
+  "id_rol": 1
 }
 ```
 

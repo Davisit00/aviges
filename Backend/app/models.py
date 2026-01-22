@@ -2,6 +2,11 @@ from sqlalchemy import Computed, CheckConstraint
 from sqlalchemy.dialects import mssql
 from .db import db
 
+class Roles(db.Model):
+    __tablename__ = "Roles"
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(50), unique=True, nullable=False)
+
 class Usuarios(db.Model):
     __tablename__ = "Usuarios"
     id = db.Column(db.Integer, primary_key=True)
@@ -9,7 +14,7 @@ class Usuarios(db.Model):
     contrasena_hash = db.Column(db.String(255), nullable=False)
     nombre = db.Column(db.String(50), nullable=False)
     apellido = db.Column(db.String(50), nullable=False)
-    rol = db.Column(db.String(20), nullable=False)
+    id_rol = db.Column(db.Integer, db.ForeignKey("Roles.id"), nullable=False)
     fecha_creacion = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class EmpresasTransporte(db.Model):
@@ -69,7 +74,7 @@ class TicketsPesaje(db.Model):
     peso_neto = db.Column(db.Numeric(19, 2), Computed("peso_bruto - peso_tara"))
     peso_avisado = db.Column(db.Numeric(18, 2))
     cantidad_cestas = db.Column(db.Integer, server_default="0")
-    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
+    fecha_creacion = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
     estado = db.Column(db.String(20), server_default="Activo")
 
 class DetallesTransporteAves(db.Model):

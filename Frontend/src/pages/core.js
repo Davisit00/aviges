@@ -21,7 +21,11 @@ const usersButton = document.getElementById("users-button");
 const ticketsButton = document.getElementById("tickets-button");
 const avesDetailsButton = document.getElementById("aves-details-button");
 const logoutButton = document.getElementById("logout-button");
-
+const weighButton = document.getElementById("weigh-button");
+const ticketPrintButton = document.getElementById("ticket-print-button");
+const relacionPesajeButton = document.getElementById(
+  "weigh-relationship-button",
+);
 // INICIO FUNCIONALIDAD MENUS DESPLEGABLES
 const maintenanceDeployButton = document.getElementById(
   "maintenance-deploy-button",
@@ -118,7 +122,7 @@ usersButton.addEventListener("click", () => {
   UsuariosInterface.setup();
 });
 
-ticketsButton.addEventListener("click", () => {
+ticketPrintButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(TicketsPesajeInterface.template, app);
   TicketsPesajeInterface.setup();
