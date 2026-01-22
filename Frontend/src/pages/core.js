@@ -44,6 +44,31 @@ processDeployButton.addEventListener("click", () => {
 reportsDeployButton.addEventListener("click", () => {
   reportsMenuList.classList.toggle("show-menu");
 });
+
+// Lógica para rotar el icono del menú
+window.addEventListener("DOMContentLoaded", () => {
+  const btn1 = document.getElementById("maintenance-deploy-button");
+  if (btn1) {
+    btn1.addEventListener("click", () => {
+      const icon = btn1.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+  const btn2 = document.getElementById("process-deploy-button");
+  if (btn2) {
+    btn2.addEventListener("click", () => {
+      const icon = btn2.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+  const btn3 = document.getElementById("reports-deploy-button");
+  if (btn3) {
+    btn3.addEventListener("click", () => {
+      const icon = btn3.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+});
 // FIN FUNCIONALIDAD MENUS DESPLEGABLES
 
 function render(template, node) {

@@ -1,8 +1,21 @@
 /*
-#FE0710 
+#ED1C24
 #FFB801
 #003B73
+
+Colores de la marca
 */
+
+:root {
+  --red-color: #ed1c24;
+  --yellow-color: #ffb801;
+  --blue-color: #003b73;
+  --light-bg: #f9f9f9;
+  --dark-bg: #ffffff;
+  --darker-text-color: #111111;
+  --text-color: #333333;
+  --hover-text-color: #555555;
+}
 
 * {
   box-sizing: border-box;
@@ -20,15 +33,49 @@ body {
 .main-menu {
   width: 300px;
   height: 100vh;
-  background-color: #333;
-  color: white;
+  background-color: #ffffff;
+  color: var(--text-color);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 0 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  justify-content: space-between;
+  padding: 20px;
+  box-shadow: 5px 0 6px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.title-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.lists-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100vh - 200px);
+  margin-bottom: 30px;
   overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+#logo-image {
+  width: 150px;
+  margin: 20px 0;
+}
+
+.main-menu h2 {
+  color: var(--text-color);
+  margin-bottom: 20px;
+}
+
+.nav-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  justify-content: flex-start;
 }
 
 #content-container {
@@ -40,59 +87,107 @@ body {
 ul {
   list-style-type: none;
   padding: 0;
+  gap: 0;
   width: 100%;
 }
 
 .menu-button {
-  width: 100%;
   padding: 10px;
-  margin: 5px 0;
-  background-color: #555;
-  color: white;
-  border: 1px solid cornflowerblue;
+  margin: 0;
+  width: 100%;
+  background-color: transparent;
+  color: var(--text-color);
+  font-weight: 500;
+  font-size: 16px;
+  border: none;
+  text-align: left;
   border-radius: 4px;
   cursor: pointer;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 .menu-button:hover {
-  background-color: #777;
+  background-color: #f0f0f0;
+  color: var(--hover-text-color);
 }
 #logout-button {
   margin-top: auto;
-  background-color: #aa3333;
+  border: 2px solid var(--red-color);
+  background-color: transparent;
+  border-radius: 8px;
+  text-align: center;
+  color: var(--red-color);
+  transition:
+    color 0.3s ease,
+    background-color 0.3s ease;
 }
 #logout-button:hover {
-  background-color: #cc5555;
+  color: var(--light-bg);
+  background-color: var(--red-color);
 }
 
+/* MODIFICADO: Cambiamos display:none por max-height: 0 para permitir la animación */
 #maintenance-menu-list,
 #process-menu-list,
 #reports-menu-list {
-  display: none;
+  display: flex; /* Siempre es flex, pero se oculta con max-height */
   flex-direction: column;
-  width: 100%;
-  margin-top: 10px;
+  width: fit-content;
+  gap: 5px;
+  padding-left: 20px; /* Usar padding en lugar de margin para que el contenedor lo calcule bien */
+  margin-top: 0;
+  /* Propiedades de la animación */
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    max-height 0.4s ease-in-out,
+    opacity 0.4s ease-in-out;
 }
 
+/* MODIFICADO: Al añadir la clase show-menu, aumentamos el max-height y la opacidad */
 #maintenance-menu-list.show-menu,
 #process-menu-list.show-menu,
 #reports-menu-list.show-menu {
-  display: flex;
+  /* display: flex; <- Eliminado, ya está definido arriba */
+  max-height: 600px; /* Un valor suficientemente alto para que quepan todos los items */
+  opacity: 1;
 }
+
 #maintenance-deploy-button,
 #process-deploy-button,
 #reports-deploy-button {
-  width: 100%;
+  display: flex;
   padding: 10px;
+  gap: 10px;
   margin: 5px 0;
-  background-color: #555;
-  color: white;
+  background-color: transparent;
+  width: fit-content;
+  text-align: center;
+  justify-content: space-between;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--darker-text-color);
   border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
+.arrow-icon {
+  transition: transform 0.3s ease;
+}
+.rotated {
+  transform: rotate(180deg);
+}
+
 #maintenance-deploy-button:hover,
 #process-deploy-button:hover,
 #reports-deploy-button:hover {
-  background-color: #777;
+  color: var(--hover-text-color);
+  background-color: #f0f0f0;
+}
+
+button {
+  border-radius: 8px;
 }

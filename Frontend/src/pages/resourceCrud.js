@@ -10,6 +10,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
   const tableId = `${resource}-table`;
   const errorId = `${resource}-error`;
   const cancelId = `${resource}-cancel`;
+  const searchId = `${resource}-search`;
 
   const renderField = (f) => {
     const type = f.type || "text";
@@ -40,6 +41,14 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <button type="submit">Guardar</button>
         <button type="button" id="${cancelId}">Cancelar</button>
       </form>
+      
+      <div style="margin: 20px 0;">
+        <label>
+          Buscar: 
+          <input type="text" id="${searchId}" placeholder="Buscar por cualquier campo..." style=" width: 250px;">
+        </label>
+      </div>
+
       <table id="${tableId}" border="1" cellpadding="6" cellspacing="0">
         <thead>
           <tr>
@@ -58,6 +67,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       const tbody = table.querySelector("tbody");
       const errorEl = document.getElementById(errorId);
       const cancelBtn = document.getElementById(cancelId);
+      const searchInput = document.getElementById(searchId);
 
       const setError = (msg) => (errorEl.textContent = msg || "");
 
@@ -163,6 +173,16 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             setError(err?.response?.data?.error || "Error al eliminar");
           }
         }
+      });
+
+      searchInput.addEventListener("input", async (e) => {
+        const query = e.target.value.trim().toLowerCase();
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+
+        rows.forEach((row) => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(query) ? "" : "none";
+        });
       });
 
       load();
