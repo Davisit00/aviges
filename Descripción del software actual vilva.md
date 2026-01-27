@@ -59,3 +59,7 @@ Datos que requiere el formato de entradas (Formato Nro. 2):
 - Cantidad de aves confirmadas o conteo final de aves
 
 Despues de analizar, se concluye que este formato lleva el control diario de las entradas de aves vivas
+
+El romanero registra una entrada, luego esa entrada queda en espera para registrar el peso tara
+El romanero registra una salida, luego esa salida queda en espera para registrar el peso bruto
+Los formatos se llenan manualmente con el numero de orden

@@ -1,4 +1,4 @@
-import { logout } from "../api.js";
+import { logout, getUserInfo } from "../api.js"; // Asegurar importación de getUserInfo
 import { ProductsInterface } from "./products.js";
 import { UsuariosInterface } from "./usuarios.js";
 import { EmpresasTransporteInterface } from "./empresasTransporte.js";
@@ -49,8 +49,30 @@ reportsDeployButton.addEventListener("click", () => {
   reportsMenuList.classList.toggle("show-menu");
 });
 
-// Lógica para rotar el icono del menú
-window.addEventListener("DOMContentLoaded", () => {
+// Variable global para almacenar el rol del usuario
+let currentUserRole = null;
+
+// Lógica para inicializar permisos y rotar iconos
+window.addEventListener("DOMContentLoaded", async () => {
+  // 1. Obtener información del usuario y Rol
+  try {
+    const res = await getUserInfo();
+    const user = res.data;
+    currentUserRole = user.id_rol;
+
+    // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
+    if (currentUserRole !== 1) {
+      if (usersButton) {
+        // Ocultamos el elemento <li> padre para que desaparezca de la lista
+        usersButton.parentElement.style.display = "none";
+      }
+    }
+  } catch (error) {
+    console.error("Error obteniendo info del usuario", error);
+    // Opcional: Redirigir si falla la autenticación crítica
+  }
+
+  // Lógica para rotar el icono del menú
   const btn1 = document.getElementById("maintenance-deploy-button");
   if (btn1) {
     btn1.addEventListener("click", () => {
@@ -80,58 +102,96 @@ function render(template, node) {
   node.innerHTML = template;
 }
 
+// Helper para determinar si es solo lectura (Rol != 1)
+// Mantenimiento es ReadOnly para no admins.
+const isMaintenanceReadOnly = () => currentUserRole !== 1;
+
+// ** LOGIC FOR PERMISSIONS **
+const getPermissions = (moduleType) => {
+  // Si es Usuario Admin (1), tiene acceso total
+  if (currentUserRole === 1) {
+    return { canCreate: true, canEdit: true, canDelete: true };
+  }
+
+  // Si es Usuario Estándar (2)
+  if (currentUserRole === 2) {
+    if (moduleType === "maintenance") {
+      // Mantenimiento solo lectura
+      return {
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+        readOnly: true,
+      };
+    }
+    if (moduleType === "process") {
+      // Procesos (Tickets/Aves): Puede crear, PERO NO editar ni eliminar
+      return { canCreate: true, canEdit: false, canDelete: false };
+    }
+  }
+
+  // Default safe fallback
+  return { canCreate: false, canEdit: false, canDelete: false, readOnly: true };
+};
+
 productsButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(ProductsInterface.template, app);
-  ProductsInterface.setup();
+  ProductsInterface.setup(getPermissions("maintenance"));
 });
 
 vehiclesButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(VehiculosInterface.template, app);
-  VehiculosInterface.setup();
+  VehiculosInterface.setup(getPermissions("maintenance"));
 });
 
 driversButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(ChoferesInterface.template, app);
-  ChoferesInterface.setup();
+  ChoferesInterface.setup(getPermissions("maintenance"));
 });
 
 transportCompaniesButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(EmpresasTransporteInterface.template, app);
-  EmpresasTransporteInterface.setup();
+  EmpresasTransporteInterface.setup(getPermissions("maintenance"));
 });
 
 farmsButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(GranjasInterface.template, app);
-  GranjasInterface.setup();
+  GranjasInterface.setup(getPermissions("maintenance"));
 });
 
 barnsButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(GalponesInterface.template, app);
-  GalponesInterface.setup();
+  GalponesInterface.setup(getPermissions("maintenance"));
 });
 
 usersButton.addEventListener("click", () => {
+  // Doble seguridad: si no es admin, no renderiza nada
+  if (currentUserRole !== 1) return;
+
   const app = document.getElementById("content-container");
   render(UsuariosInterface.template, app);
-  UsuariosInterface.setup();
+  // Usuarios siempre full permissions porque solo entra admin
+  UsuariosInterface.setup({ canCreate: true, canEdit: true, canDelete: true });
 });
 
 weighButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(TicketsPesajeInterface.template, app);
-  TicketsPesajeInterface.setup();
+  // Tickets usa permisos de 'process'
+  TicketsPesajeInterface.setup(getPermissions("process"));
 });
 
 avesDetailsButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(DetallesTransporteAvesInterface.template, app);
-  DetallesTransporteAvesInterface.setup();
+  // Detalles Aves usa permisos de 'process'
+  DetallesTransporteAvesInterface.setup(getPermissions("process"));
 });
 
 logoutButton.addEventListener("click", () => {

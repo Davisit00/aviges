@@ -35,3 +35,5 @@ export const updateResource = (resource, id, data) =>
   api.put(`/${resource}/${id}`, data);
 export const deleteResource = (resource, id) =>
   api.delete(`/${resource}/${id}`);
+
+export const getWeighFromTruckScale = () => api.get("/serial/read");

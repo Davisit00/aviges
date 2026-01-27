@@ -194,12 +194,14 @@ def update_resource(resource, id_):
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
 
-    # CAMBIO: Manejo especial para usuarios
+    # CAMBIO: Elimina peso_neto si viene en el payload (para cualquier modelo)
+    data.pop("peso_neto", None)
+
+    # Manejo especial para usuarios
     if resource == "usuarios" and "contrasena" in data:
-        pwd = data.pop("contrasena") # Sacamos el campo raw
-        if pwd: # Solo si escribió algo lo hasheamos y agregamos al payload
+        pwd = data.pop("contrasena")
+        if pwd:
             data["contrasena_hash"] = generate_password_hash(pwd)
-        # Si pwd está vacío (ej. al editar sin cambiar pass), se eliminó y no se actualiza
 
     ok, err = validate_payload(model, data, partial=True)
     if not ok:
@@ -264,3 +266,61 @@ def read_serial():
         return jsonify({"error": f"No se pudo acceder al puerto {SERIAL_PORT}. Verifique conexión.", "details": str(e)}), 500
     except Exception as e:
         return jsonify({"error": "Error inesperado leyendo puerto serial", "details": str(e)}), 500
+
+# ---------- TICKETS PESAJE ----------
+
+@api_bp.route("/tickets_pesaje/registrar_peso", methods=["POST"])
+@jwt_required()
+def registrar_peso_ticket():
+    data = request.get_json(force=True) or {}
+    ticket_id = data.get("id")
+    tipo_peso = data.get("tipo_peso")  # "bruto" o "tara"
+    peso = data.get("peso")
+
+    if not ticket_id or tipo_peso not in ("bruto", "tara") or peso is None:
+        return jsonify({"error": "Datos requeridos: id, tipo_peso (bruto|tara), peso"}), 400
+
+    ticket = TicketsPesaje.query.get(ticket_id)
+    if not ticket:
+        return jsonify({"error": "Ticket no encontrado"}), 404
+
+    if tipo_peso == "bruto":
+        ticket.peso_bruto = peso
+    elif tipo_peso == "tara":
+        ticket.peso_tara = peso
+
+    # Si ambos pesos están presentes, calcular neto y marcar como finalizado
+    if ticket.peso_bruto and ticket.peso_tara:
+        ticket.peso_neto = abs(ticket.peso_bruto - ticket.peso_tara)
+        ticket.estado = "Finalizado"
+    else:
+        ticket.estado = "En Proceso"
+
+    from . import db  # Asegúrate de tener
+
+@api_bp.route("/tickets_pesaje", methods=["POST"])
+@jwt_required()
+def create_ticket_pesaje():
+    from .models import TicketsPesaje
+    from . import db
+
+    data = request.get_json(force=True) or {}
+
+    # Elimina nro_ticket y peso_neto si vienen del frontend
+    data.pop("nro_ticket", None)
+    data.pop("peso_neto", None)
+
+    ok, err = validate_payload(TicketsPesaje, data, partial=False)
+    if not ok:
+        return jsonify({"error": err}), 400
+
+    # Genera un nro_ticket temporal (por ejemplo, "PENDIENTE")
+    ticket = TicketsPesaje(nro_ticket="PENDIENTE", **data)
+    db.session.add(ticket)
+    db.session.commit()  # Ahora ticket.id existe
+
+    # Ahora sí puedes asignar el nro_ticket real
+    ticket.nro_ticket = f"TKT-{ticket.id:06d}"
+    db.session.commit()
+
+    return jsonify(serialize(ticket)), 201

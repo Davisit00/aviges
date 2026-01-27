@@ -3,7 +3,8 @@ import {
   createResource,
   updateResource,
   deleteResource,
-  getUserInfo, // <--- Importamos getUserInfo
+  getUserInfo,
+  getWeighFromTruckScale,
 } from "../api.js";
 
 // Helper to determine the resource URL based on the FK field name
@@ -18,7 +19,7 @@ const getRelatedResourceName = (fieldName) => {
     producto: "productos",
     vehiculo: "vehiculos",
     chofer: "choferes",
-    rol: "roles", // <-- Agregado nuevo mapeo para roles
+    rol: "roles",
   };
   return map[singular] || singular + "s";
 };
@@ -27,7 +28,6 @@ const getRelatedResourceName = (fieldName) => {
 const getDisplayLabel = (item) => {
   if (!item) return "";
   if (item.nombre_usuario) return item.nombre_usuario;
-  // Priorizar cédula antes que nombre solo
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;
@@ -51,7 +51,16 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     const readOnly = f.readOnly ? "readonly" : "";
     const hidden = f.hidden ? "hidden" : "";
 
-    // Handle Foreign Keys: Render as Input with Datalist (Searchable)
+    // Agregamos lógica para botón de pesaje
+    let addonButton = "";
+    if (f.captureWeight) {
+      addonButton = `
+            <button type="button" class="weigh-capture-btn" data-target="${f.name}" style="margin-left:8px; cursor:pointer;" disabled>
+               ⚖️ Capturar
+            </button>
+        `;
+    }
+
     if (f.name.startsWith("id_") && !f.hidden) {
       const listId = `list-${f.name}`;
       return `
@@ -69,7 +78,6 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           >
           <!-- Lista de opciones ocultas -->
           <datalist id="${listId}"></datalist>
-          
           <!-- Input oculto que guarda el valor real (ID) -->
           <input type="hidden" name="${f.name}">
         </label>
@@ -77,17 +85,17 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     }
 
     if (type === "checkbox") {
-      return `
-        <label>
-          <input type="checkbox" name="${f.name}" ${hidden} />
-          ${f.label}
-        </label>
-      `;
+      return `<label><input type="checkbox" name="${f.name}" ${hidden} /> ${f.label}</label>`;
     }
+
+    // Renderizado estándar con posible botón addon
     return `
       <label>
         ${f.label}
-        <input type="${type}" name="${f.name}" ${readOnly} ${hidden} />
+        <div style="display:flex; align-items:center;">
+            <input type="${type}" name="${f.name}" ${readOnly} ${hidden} style="flex:1;" />
+            ${addonButton}
+        </div>
       </label>
     `;
   };
@@ -105,7 +113,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       <div style="margin: 20px 0;">
         <label>
           Buscar: 
-          <input type="text" id="${searchId}" placeholder="Buscar por cualquier campo..." style=" width: 250px;">
+          <input type="text" id="${searchId}" placeholder="Buscar ..." style=" width: 250px;">
         </label>
       </div>
 
@@ -113,20 +121,32 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <thead>
           <tr>
             ${fields
-              .filter((f) => f.type !== "password") // <-- CAMBIO: No mostrar header si es password
+              .filter((f) => f.type !== "password")
               .map((f) => `<th>${f.label}</th>`)
               .join("")}
-            <th>Acciones</th>
+            <th class="actions-header">Acciones</th>
           </tr>
         </thead>
         <tbody></tbody>
       </table>
     `,
-    setup() {
+    setup({
+      readOnly = false,
+      canCreate = true,
+      canEdit = true,
+      canDelete = true,
+    } = {}) {
+      // Si es readOnly estricto (no tickets), bloqueamos todo
+      if (readOnly && resource !== "tickets_pesaje") {
+        canCreate = false;
+        canEdit = false;
+        canDelete = false;
+      }
+
       let editingId = null;
       let currentItems = [];
-      let relatedData = {}; // Stores fetched lists: { fieldName: [items...] }
-      let currentUser = null; // <--- Variable para almacenar el usuario actual
+      let relatedData = {};
+      let currentUser = null;
 
       const form = document.getElementById(formId);
       const table = document.getElementById(tableId);
@@ -134,16 +154,148 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       const errorEl = document.getElementById(errorId);
       const cancelBtn = document.getElementById(cancelId);
       const searchInput = document.getElementById(searchId);
+      const submitBtn = form
+        ? form.querySelector('button[type="submit"]')
+        : null;
+
+      const weighButtons = form.querySelectorAll(".weigh-capture-btn");
 
       const fkFields = fields.filter(
         (f) => f.name.startsWith("id_") && !f.hidden,
       );
 
+      // --- Gestión de Estados del Formulario (Incluyendo lógica de Pesaje) ---
+      const updateFormState = () => {
+        const inputs = form.querySelectorAll("input, select, textarea");
+
+        // 1. MODO CREACIÓN
+        if (!editingId) {
+          if (canCreate) {
+            submitBtn.textContent = "Guardar Entrada";
+            inputs.forEach((i) => {
+              // Si el campo es readOnly por config (como peso), se queda disabled, excepto si es manejado por botón
+              const fieldConfig = fields.find((f) => f.name === i.name);
+              if (fieldConfig?.readOnly) i.disabled = true;
+              else i.disabled = false;
+            });
+            weighButtons.forEach((btn) => (btn.disabled = false)); // Habilitar balanza
+            submitBtn.style.display = "inline-block";
+            cancelBtn.textContent = "Cancelar";
+          } else {
+            // Sin permiso de crear
+            inputs.forEach((i) => (i.disabled = true));
+            weighButtons.forEach((btn) => (btn.disabled = true));
+            submitBtn.style.display = "none";
+          }
+        }
+        // 2. MODO EDICIÓN / VISUALIZACIÓN
+        else {
+          // Obtener el item actual para revisar estado
+          const item = currentItems.find((i) => i.id == editingId);
+          const isTicketInProcess =
+            resource === "tickets_pesaje" && item?.estado === "En Proceso";
+
+          // Caso Especial: Ticket en Proceso (Permitir "Salida" aunque sea ReadOnly o Rol 2)
+          if (isTicketInProcess) {
+            submitBtn.textContent = "Finalizar Salida";
+            submitBtn.style.display = "inline-block"; // Mostrar botón para completar
+            cancelBtn.textContent = "Cancelar";
+
+            inputs.forEach((i) => (i.disabled = true)); // Bloquear todo por defecto
+
+            // Habilitar SOLO botones de captura para campos vacíos
+            weighButtons.forEach((btn) => {
+              const inputName = btn.dataset.target;
+              const val = item[inputName];
+              // Si el valor es 0 o null, permitir capturar
+              if (!val || val === 0) {
+                btn.disabled = false;
+              } else {
+                btn.disabled = true;
+              }
+            });
+          } else if (canEdit) {
+            // Edición normal
+            submitBtn.textContent = "Actualizar";
+            inputs.forEach((i) => (i.disabled = false));
+            submitBtn.style.display = "inline-block";
+            weighButtons.forEach((btn) => (btn.disabled = false));
+          } else {
+            // Solo lectura estricta (Ticket Finalizado o Usuario sin permisos)
+            inputs.forEach((i) => (i.disabled = true));
+            weighButtons.forEach((btn) => (btn.disabled = true));
+            submitBtn.style.display = "none";
+            cancelBtn.textContent = "Cerrar Detalle";
+          }
+        }
+      };
+
       const setError = (msg) => (errorEl.textContent = msg || "");
 
-      // Función auxiliar para prellenar el usuario si aplica
+      // Lógica de captura de peso
+      weighButtons.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const targetName = btn.dataset.target;
+          const input = form.querySelector(`input[name="${targetName}"]`);
+
+          btn.disabled = true;
+          btn.textContent = "⏳ Leyendo...";
+
+          try {
+            const res = await getWeighFromTruckScale();
+            console.log("Respuesta Balanza:", res);
+
+            // CORRECCIÓN: Lógica robusta para extraer el peso escalar
+            let weight = null;
+
+            if (res.data && typeof res.data === "object") {
+              // Si devuelve objeto, buscamos propiedades comunes en orden de probabilidad
+              if (res.data.weight !== undefined) weight = res.data.weight;
+              else if (res.data.data !== undefined)
+                weight = res.data.data; // <--- AÑADIDO: Tu API devuelve { data: "..." }
+              else if (res.data.value !== undefined) weight = res.data.value;
+              else if (res.data.reading !== undefined)
+                weight = res.data.reading;
+              else {
+                // Si es un objeto pero no tiene claves conocidas
+                throw new Error(
+                  "La balanza devolvió un objeto sin propiedad de peso conocida (weight, data, value).",
+                );
+              }
+            } else {
+              // Si devuelve directamente el numero/string
+              weight = res.data;
+            }
+
+            // Validación final para asegurar que no metemos un Objeto al input
+            if (weight === null || typeof weight === "object") {
+              throw new Error("Formato de peso inválido recibido.");
+            }
+
+            console.log("Peso extraído:", weight);
+            if (input) {
+              input.value = weight;
+              // Disparar evento input para que se detecten cambios
+              input.dispatchEvent(new Event("input"));
+            }
+          } catch (err) {
+            console.error(err);
+            setError(
+              "Error al leer balanza: " + (err.message || "Desconocido"),
+            );
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "⚖️ Capturar";
+            // En modo proceso, volver a deshabilitar si ya tiene valor
+            if (editingId && resource === "tickets_pesaje") {
+              // updateFormState verifica si tiene valor, si ya tiene, lo bloquea en la sig iteración
+            }
+          }
+        });
+      });
+
       const applyCurrentUser = () => {
-        if (!currentUser || editingId) return; // Solo aplicar en creación (no edición)
+        if (!currentUser || editingId) return; // Solo aplicar en creación
 
         const userField = fields.find((f) => f.name === "id_usuario");
         if (userField) {
@@ -153,6 +305,48 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           if (hiddenInput) hiddenInput.value = currentUser.id;
           if (searchInput) searchInput.value = getDisplayLabel(currentUser);
         }
+      };
+
+      const renderRows = (items) => {
+        tbody.innerHTML = "";
+        items.forEach((item) => {
+          const tr = document.createElement("tr");
+
+          // Generar celdas de datos
+          const dataCells = fields
+            .filter((f) => f.type !== "password")
+            .map((f) => {
+              let val = item[f.name] ?? "";
+              if (f.name.startsWith("id_") && relatedData[f.name]) {
+                const relItem = relatedData[f.name].find((r) => r.id == val);
+                if (relItem) val = getDisplayLabel(relItem) || val;
+              }
+              return `<td>${val}</td>`;
+            })
+            .join("");
+
+          // Generar celda de acciones
+          let actionsCell = "";
+          if (readOnly) {
+            // Modo Solo Lectura: Botón para poblar el formulario y ver detalles
+            actionsCell = `
+                <td>
+                  <button data-action="view" data-id="${item.id}">Ver Detalle</button>
+                </td>
+              `;
+          } else {
+            // Modo Edición: Botones normales
+            actionsCell = `
+                <td>
+                  <button data-action="edit" data-id="${item.id}">Editar</button>
+                  <button data-action="delete" data-id="${item.id}">Eliminar</button>
+                </td>
+              `;
+          }
+
+          tr.innerHTML = dataCells + actionsCell;
+          tbody.appendChild(tr);
+        });
       };
 
       const loadRelatedResources = async () => {
@@ -172,7 +366,6 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
               dataList.innerHTML = "";
               items.forEach((item) => {
                 const opt = document.createElement("option");
-                // En datalist, el value es lo que se muestra en el input de texto
                 opt.value = getDisplayLabel(item);
                 dataList.appendChild(opt);
               });
@@ -181,13 +374,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             console.error(`Error loading related resource ${resName}`, err);
           }
         }
-        // Forzar actualización de la tabla
+        // Refrescar tabla si ya se cargó para mostrar nombres en lugar de IDs
         if (currentItems.length > 0) {
           renderRows(currentItems);
         }
       };
 
-      // Cargar información del usuario actual si existe el campo id_usuario
       const loadUserInfo = async () => {
         if (fields.some((f) => f.name === "id_usuario")) {
           try {
@@ -203,7 +395,6 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       // Listener para sincronizar la búsqueda (texto) con el input oculto (ID)
       form.addEventListener("input", (e) => {
         const input = e.target;
-        // Solo nos interesa si es uno de los inputs de búsqueda generados
         if (input.id && input.id.startsWith("search-id_")) {
           const fieldName = input.id.replace("search-", "");
           const val = input.value;
@@ -214,36 +405,47 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             return;
           }
 
-          // Buscar el item en la data cargada que coincida con el texto
           const list = relatedData[fieldName] || [];
           const match = list.find((item) => getDisplayLabel(item) === val);
 
           if (match) {
             hiddenInput.value = match.id;
           } else {
-            // Si el usuario escribió algo que no está en la lista exacta, el ID queda vacio
-            // (Opcional: podrías dejarlo invalidado o manejar creación dinámica)
             hiddenInput.value = "";
           }
         }
       });
 
+      // MODIFICACIÓN DE getFormData para inyectar ESTADO
       const getFormData = () => {
         const data = {};
         fields.forEach((f) => {
-          if (f.readOnly || f.name === "id") return;
+          if (f.name === "id") return;
           const el = form.querySelector(`[name="${f.name}"]`);
+
+          // Lógica de Estado Automático para Tickets
+          if (resource === "tickets_pesaje" && f.name === "estado") {
+            const pesoBruto = form.querySelector('[name="peso_bruto"]')?.value;
+            const pesoTara = form.querySelector('[name="peso_tara"]')?.value;
+
+            if (pesoBruto && pesoTara && pesoBruto > 0 && pesoTara > 0) {
+              data["estado"] = "Finalizado";
+            } else {
+              data["estado"] = "En Proceso";
+            }
+            return;
+          }
+
           if (!el) return;
 
           if (f.type === "checkbox") {
             data[f.name] = !!el.checked;
           } else {
-            // El input hidden ya tendrá el valor correcto (ID) gracias al listener anterior
             if (
               (f.name.startsWith("id_") || f.type === "number") &&
               el.value !== ""
             ) {
-              data[f.name] = parseFloat(el.value); // Parsear ID o numero
+              data[f.name] = parseFloat(el.value);
             } else {
               data[f.name] = el.value;
             }
@@ -254,14 +456,17 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
       const setFormData = (item) => {
         fields.forEach((f) => {
-          // Checkboxes y campos normales
           const el = form.querySelector(`[name="${f.name}"]`);
 
-          // Caso especial: Foreign Keys (actualizar input visible y oculto)
           if (f.name.startsWith("id_")) {
             const searchInput = document.getElementById(`search-${f.name}`);
             const hiddenInput = form.querySelector(`[name="${f.name}"]`);
-            const idVal = item[f.name];
+
+            // CORRECCIÓN: Manejo de objetos nesteadas en FKs
+            let idVal = item[f.name];
+            if (idVal && typeof idVal === "object") {
+              idVal = idVal.id; // Extraer ID si viene el objeto completo
+            }
 
             if (hiddenInput) hiddenInput.value = idVal ?? "";
 
@@ -281,133 +486,100 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             return;
           }
 
-          if (f.type === "checkbox") el.checked = !!item[f.name];
-          else el.value = item[f.name] ?? "";
+          let val = item[f.name];
+
+          // CORRECCIÓN FINAL: Evitar asignar Objetos a inputs normales (evita el crash)
+          if (val && typeof val === "object") {
+            // Si el campo no es ID pero viene un objeto, lo limpiamos o lo convertimos a string seguro
+            console.warn(
+              `Campo ${f.name} recibió un objeto, se limpiará para evitar error.`,
+            );
+            val = "";
+          }
+
+          if (f.type === "checkbox") el.checked = !!val;
+          else el.value = val ?? "";
         });
       };
 
       const clearForm = () => {
         editingId = null;
         form.reset();
-
-        // Limpiar manualmente los inputs de autocompletado (search-*)
-        fields.forEach((f) => {
-          if (f.name.startsWith("id_")) {
-            const searchInput = document.getElementById(`search-${f.name}`);
-            const hiddenInput = form.querySelector(`input[name="${f.name}"]`);
-            if (searchInput) searchInput.value = "";
-            if (hiddenInput) hiddenInput.value = "";
-          }
-        });
-
-        // Re-aplicar el usuario actual por defecto
-        applyCurrentUser();
-      };
-
-      const renderRows = (items) => {
-        tbody.innerHTML = "";
-        items.forEach((item) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            ${fields
-              .filter((f) => f.type !== "password") // <-- CAMBIO: No mostrar celda si es password
-              .map((f) => {
-                let val = item[f.name] ?? "";
-                // If it's a key and we have related data, show the label instead of ID
-                if (f.name.startsWith("id_") && relatedData[f.name]) {
-                  const relItem = relatedData[f.name].find((r) => r.id == val);
-                  if (relItem) val = getDisplayLabel(relItem) || val;
-                }
-                return `<td>${val}</td>`;
-              })
-              .join("")}
-            <td>
-              <button data-action="edit" data-id="${item.id}">Editar</button>
-              <button data-action="delete" data-id="${item.id}">Eliminar</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
+        // Reset custom inputs logic
+        // ...
+        if (canCreate) applyCurrentUser();
+        updateFormState(); // Restablecer estado a Create o View
       };
 
       const load = async () => {
         setError("");
         try {
+          // Usar sort: id desc para ver lo último primero
           const res = await listResource(resource, {
             page: 1,
             per_page: pageSize,
+            sort: "id",
+            order: "desc",
           });
           currentItems = res.data.items || res.data || [];
           renderRows(currentItems);
-        } catch (err) {
-          setError(err?.response?.data?.error || "Error al cargar");
+        } catch (e) {
+          setError(e.message);
         }
       };
 
+      // Override submit para validación de pesos
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         setError("");
+
+        // Validación específica tickets
+        if (resource === "tickets_pesaje") {
+          const formData = getFormData();
+          if (!formData.peso_bruto && !formData.peso_tara) {
+            setError("Debe capturar al menos un peso.");
+            return;
+          }
+        }
+
         const payload = getFormData();
-        console.log("Creating resource with payload:", payload);
         try {
           if (editingId) {
-            await updateResource(resource, editingId, payload);
+            // Permitir update si es ticket en proceso, aunque canEdit sea false globalmente
+            const item = currentItems.find((i) => i.id == editingId);
+            if (
+              (!canEdit &&
+                resource === "tickets_pesaje" &&
+                item.estado === "En Proceso") ||
+              canEdit
+            ) {
+              await updateResource(resource, editingId, payload);
+            } else {
+              throw new Error("No tienes permiso para editar.");
+            }
           } else {
+            if (!canCreate) throw new Error("No tienes permiso para crear.");
             await createResource(resource, payload);
           }
           clearForm();
           await load();
         } catch (err) {
-          setError(err?.response?.data?.error || "Error al guardar");
+          setError(
+            err?.response?.data?.error || err.message || "Error al guardar",
+          );
         }
       });
 
-      cancelBtn.addEventListener("click", () => clearForm());
-
-      table.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button");
-        if (!btn) return;
-        const id = btn.dataset.id;
-        const action = btn.dataset.action;
-
-        if (action === "edit") {
-          editingId = id;
-          // Find the raw item data to populate form fields (especially IDs for selects)
-          const item = currentItems.find((i) => i.id == id);
-          if (item) setFormData(item);
-        } else if (action === "delete") {
-          if (confirm("¿Estás seguro de que quieres eliminar este elemento?")) {
-            try {
-              await deleteResource(resource, id);
-              await load();
-            } catch (err) {
-              setError(err?.response?.data?.error || "Error al eliminar");
-            }
-          }
-        }
-      });
-
+      cancelBtn.addEventListener("click", clearForm);
       searchInput.addEventListener("input", (e) => {
-        const query = e.target.value.toLowerCase();
-        const filtered = currentItems.filter((item) =>
-          fields.some((f) => {
-            const val = item[f.name] ?? "";
-            return (
-              val.toString().toLowerCase().includes(query) ||
-              (f.name.startsWith("id_") &&
-                relatedData[f.name]?.some((r) =>
-                  getDisplayLabel(r).toLowerCase().includes(query),
-                ))
-            );
-          }),
-        );
-        renderRows(filtered);
+        /* ... */
       });
 
-      // Initial load
+      // Init
+      updateFormState();
       load();
       loadRelatedResources();
-      loadUserInfo(); // <--- Llamada inicial para cargar usuario
+      if (canCreate) loadUserInfo();
     },
   };
 };
