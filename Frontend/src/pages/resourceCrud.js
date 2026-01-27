@@ -3,6 +3,7 @@ import {
   createResource,
   updateResource,
   deleteResource,
+  getUserInfo, // <--- Importamos getUserInfo
 } from "../api.js";
 
 // Helper to determine the resource URL based on the FK field name
@@ -125,6 +126,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       let editingId = null;
       let currentItems = [];
       let relatedData = {}; // Stores fetched lists: { fieldName: [items...] }
+      let currentUser = null; // <--- Variable para almacenar el usuario actual
 
       const form = document.getElementById(formId);
       const table = document.getElementById(tableId);
@@ -138,6 +140,20 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       );
 
       const setError = (msg) => (errorEl.textContent = msg || "");
+
+      // Función auxiliar para prellenar el usuario si aplica
+      const applyCurrentUser = () => {
+        if (!currentUser || editingId) return; // Solo aplicar en creación (no edición)
+
+        const userField = fields.find((f) => f.name === "id_usuario");
+        if (userField) {
+          const hiddenInput = form.querySelector('input[name="id_usuario"]');
+          const searchInput = document.getElementById("search-id_usuario");
+
+          if (hiddenInput) hiddenInput.value = currentUser.id;
+          if (searchInput) searchInput.value = getDisplayLabel(currentUser);
+        }
+      };
 
       const loadRelatedResources = async () => {
         for (const f of fkFields) {
@@ -168,6 +184,19 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         // Forzar actualización de la tabla
         if (currentItems.length > 0) {
           renderRows(currentItems);
+        }
+      };
+
+      // Cargar información del usuario actual si existe el campo id_usuario
+      const loadUserInfo = async () => {
+        if (fields.some((f) => f.name === "id_usuario")) {
+          try {
+            const res = await getUserInfo();
+            currentUser = res.data;
+            applyCurrentUser();
+          } catch (err) {
+            console.error("Error cargando info de usuario", err);
+          }
         }
       };
 
@@ -260,8 +289,19 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       const clearForm = () => {
         editingId = null;
         form.reset();
-        // Limpiar manualmente los inputs de "search-" también si reset no los cubriera del todo
-        // (aunque form.reset limpia todos los inputs dentro del form)
+
+        // Limpiar manualmente los inputs de autocompletado (search-*)
+        fields.forEach((f) => {
+          if (f.name.startsWith("id_")) {
+            const searchInput = document.getElementById(`search-${f.name}`);
+            const hiddenInput = form.querySelector(`input[name="${f.name}"]`);
+            if (searchInput) searchInput.value = "";
+            if (hiddenInput) hiddenInput.value = "";
+          }
+        });
+
+        // Re-aplicar el usuario actual por defecto
+        applyCurrentUser();
       };
 
       const renderRows = (items) => {
@@ -367,6 +407,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       // Initial load
       load();
       loadRelatedResources();
+      loadUserInfo(); // <--- Llamada inicial para cargar usuario
     },
   };
 };

@@ -23,6 +23,7 @@ export const logout = () => {
   api.post("/auth/logout");
   localStorage.removeItem("access_token");
 };
+export const getUserInfo = () => api.get("/usuarios/me");
 
 // CRUD genérico
 export const listResource = (resource, params) =>

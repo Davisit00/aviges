@@ -1,6 +1,9 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+import serial
+import serial.tools.list_ports # <--- Agrega esta importación extra
+
 from .models import (
     Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
     Vehiculos, Choferes, TicketsPesaje, DetallesTransporteAves
@@ -146,13 +149,22 @@ def bulk_resources():
 
     return jsonify(result)
 
-@api_bp.route("/<resource>/<int:id_>", methods=["GET"])
+@api_bp.route("/<resource>/<string:id_>", methods=["GET"])
 @jwt_required()
 def get_resource(resource, id_):
     model = MODEL_MAP.get(resource)
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
-    obj = model.query.get_or_404(id_)
+    
+    # Si piden un usuario y el id es "me", obtenemos el ID desde el token
+    if resource == "usuarios" and id_ == "me":
+        id_ = get_jwt_identity()
+
+    # Validamos que el ID final sea numérico
+    if not str(id_).isdigit():
+        return jsonify({"error": "ID inválido"}), 400
+
+    obj = model.query.get_or_404(int(id_))
     return jsonify(serialize(obj))
 
 @api_bp.route("/<resource>", methods=["POST"])
@@ -205,3 +217,50 @@ def delete_resource(resource, id_):
     service = CRUDService(model)
     obj = service.delete(id_)
     return jsonify(serialize(obj))
+
+# ---------- SERIAL PORT ----------
+
+# NUEVA RUTA: Úsala para ver qué puertos detecta realmente tu PC
+@api_bp.route("/serial/list", methods=["GET"])
+@jwt_required()
+def list_serial_ports():
+    ports = serial.tools.list_ports.comports()
+    result = []
+    for port in ports:
+        result.append({
+            "device": port.device,       # El nombre que debes poner en SERIAL_PORT (ej: COM3)
+            "name": port.name,
+            "description": port.description,
+            "hwid": port.hwid
+        })
+    return jsonify(result)
+
+@api_bp.route("/serial/read", methods=["GET"])
+@jwt_required()
+def read_serial():
+    # CONFIGURACIÓN: CAMBIA ESTO por el valor 'device' que obtengas en /serial/list
+    # CAMBIADO A COM2 para escuchar lo que envía el script simulador en COM1
+    SERIAL_PORT = 'COM2' 
+    BAUD_RATE = 9600
+    TIMEOUT = 5 # Reducimos un poco el timeout para que no bloquee tanto si falla
+
+    try:
+        # Intentamos abrir el puerto y leer
+        with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT) as ser:
+            # flushInput limpia el buffer para leer solo los datos más recientes
+            ser.reset_input_buffer() 
+            
+            # Leemos una línea (hasta encontrar un caracter de nueva línea \n)
+            data_bytes = ser.readline()
+            
+            if data_bytes:
+                # Decodificamos los bytes a string
+                data_str = data_bytes.decode('utf-8', errors='ignore').strip()
+                return jsonify({"data": data_str, "status": "success"})
+            else:
+                return jsonify({"error": "Tiempo de espera agotado, no se recibieron datos", "status": "timeout"}), 408
+
+    except serial.SerialException as e:
+        return jsonify({"error": f"No se pudo acceder al puerto {SERIAL_PORT}. Verifique conexión.", "details": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": "Error inesperado leyendo puerto serial", "details": str(e)}), 500

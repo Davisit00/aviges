@@ -181,3 +181,7 @@ flask --app run.py db upgrade
 - El CRUD es genérico, no incluye validaciones por negocio.
 - Para producción, agrega manejo de errores avanzado y rotación de JWT.
 - Si cambia el driver, actualiza `DATABASE_DRIVER` en `.env`.
+
+## COMANDO PARA INSTALAR LAS LIBRERIAS DE PYTHON
+
+python -m pip install -r requirements.txt

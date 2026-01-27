@@ -122,7 +122,7 @@ usersButton.addEventListener("click", () => {
   UsuariosInterface.setup();
 });
 
-ticketPrintButton.addEventListener("click", () => {
+weighButton.addEventListener("click", () => {
   const app = document.getElementById("content-container");
   render(TicketsPesajeInterface.template, app);
   TicketsPesajeInterface.setup();
