@@ -175,15 +175,30 @@ def create_resource(resource):
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
 
+    # Solo productos: ignorar codigo del frontend
+    if resource == "productos" and "codigo" in data:
+        data.pop("codigo")
+
     # CAMBIO: Manejo especial para usuarios (hashear contraseña)
     if resource == "usuarios" and "contrasena" in data:
         data["contrasena_hash"] = generate_password_hash(data.pop("contrasena"))
+
+    # Productos: codigo temporal para cumplir NOT NULL
+    if resource == "productos":
+        data["codigo"] = "PENDIENTE"
 
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
     service = CRUDService(model)
     obj = service.create(data)
+
+    # Generar código definitivo basado en ID
+    if resource == "productos":
+        obj.codigo = f"PRD-{obj.id:06d}"
+        from . import db
+        db.session.commit()
+
     return jsonify(serialize(obj)), 201
 
 @api_bp.route("/<resource>/<int:id_>", methods=["PUT"])

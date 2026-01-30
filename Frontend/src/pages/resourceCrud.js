@@ -45,6 +45,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
   const errorId = `${resource}-error`;
   const cancelId = `${resource}-cancel`;
   const searchId = `${resource}-search`;
+  const modalId = `${resource}-modal`;
 
   const renderField = (f) => {
     const type = f.type || "text";
@@ -104,11 +105,18 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     template: `
       <h2>${title}</h2>
       <div id="${errorId}" style="color: red;"></div>
-      <form id="${formId}">
-        ${fields.map(renderField).join("")}
-        <button type="submit">Guardar</button>
-        <button type="button" id="${cancelId}">Cancelar</button>
-      </form>
+
+      <div style="margin: 10px 0;">
+        <button id="${resource}-new-btn">+ Nueva Entrada</button>
+      </div>
+
+      <div id="${modalId}" style="display:none; background: white; opacity: 1 !important; width: 70%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
+        <form id="${formId}">
+          ${fields.map(renderField).join("")}
+          <button type="submit">Guardar</button>
+          <button type="button" id="${cancelId}">Cancelar</button>
+        </form>
+      </div>
       
       <div style="margin: 20px 0;">
         <label>
@@ -158,74 +166,158 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         ? form.querySelector('button[type="submit"]')
         : null;
 
-      const weighButtons = form.querySelectorAll(".weigh-capture-btn");
-
       const fkFields = fields.filter(
         (f) => f.name.startsWith("id_") && !f.hidden,
       );
 
-      // --- Gestión de Estados del Formulario (Incluyendo lógica de Pesaje) ---
+      const weighButtons = form
+        ? form.querySelectorAll(".weigh-capture-btn")
+        : [];
+
+      const overlay = document.getElementById("modal-overlay");
+      const modal = document.getElementById(modalId);
+
+      if (overlay && modal && modal.parentElement !== overlay) {
+        overlay.appendChild(modal);
+
+        overlay.style.position = "fixed";
+        overlay.style.top = "0";
+        overlay.style.left = "0";
+        overlay.style.width = "100%";
+        overlay.style.height = "100%";
+        overlay.style.display = "none";
+        overlay.style.alignItems = "flex-start";
+        overlay.style.justifyContent = "center";
+        overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
+        overlay.style.opacity = "1";
+        overlay.style.zIndex = "10000000";
+      }
+
+      const openItem = (id, mode = "view") => {
+        const item = currentItems.find((i) => i.id == id);
+        if (!item) return;
+        editingId = item.id;
+        setFormData(item);
+
+        if (mode === "view" || !canEdit) {
+          readOnly = true;
+        } else {
+          readOnly = false;
+        }
+
+        updateFormState();
+        showModal();
+      };
+
+      table.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+
+        if (action === "view") {
+          openItem(id, "view");
+          return;
+        }
+        if (action === "edit") {
+          openItem(id, "edit");
+          return;
+        }
+        if (action === "delete") {
+          // ...existing delete logic...
+          return;
+        }
+      });
+
+      tbody.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        const row = e.target.closest("tr");
+        if (!row) return;
+        const id = row.dataset.id;
+        openItem(id, canEdit ? "edit" : "view");
+      });
+
+      const showModal = () => {
+        if (overlay) overlay.style.display = "flex";
+        if (modal) modal.style.display = "block";
+      };
+
+      const hideModal = () => {
+        if (overlay) overlay.style.display = "none";
+        if (modal) modal.style.display = "none";
+      };
+
+      if (overlay) {
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) hideModal();
+        });
+      }
+
       const updateFormState = () => {
         const inputs = form.querySelectorAll("input, select, textarea");
 
-        // 1. MODO CREACIÓN
         if (!editingId) {
           if (canCreate) {
             submitBtn.textContent = "Guardar Entrada";
             inputs.forEach((i) => {
-              // Si el campo es readOnly por config (como peso), se queda disabled, excepto si es manejado por botón
               const fieldConfig = fields.find((f) => f.name === i.name);
               if (fieldConfig?.readOnly) i.disabled = true;
               else i.disabled = false;
             });
-            weighButtons.forEach((btn) => (btn.disabled = false)); // Habilitar balanza
+
+            // Productos: ocultar campo código en creación
+            if (resource === "productos") {
+              const codigoInput = form.querySelector('input[name="codigo"]');
+              const codigoLabel = codigoInput?.closest("label");
+              if (codigoLabel) codigoLabel.style.display = "none";
+            }
+
+            weighButtons.forEach((btn) => (btn.disabled = false));
             submitBtn.style.display = "inline-block";
             cancelBtn.textContent = "Cancelar";
           } else {
-            // Sin permiso de crear
             inputs.forEach((i) => (i.disabled = true));
             weighButtons.forEach((btn) => (btn.disabled = true));
             submitBtn.style.display = "none";
           }
-        }
-        // 2. MODO EDICIÓN / VISUALIZACIÓN
-        else {
-          // Obtener el item actual para revisar estado
+        } else {
+          // 2. MODO EDICIÓN / VISUALIZACIÓN
           const item = currentItems.find((i) => i.id == editingId);
           const isTicketInProcess =
             resource === "tickets_pesaje" && item?.estado === "En Proceso";
 
-          // Caso Especial: Ticket en Proceso (Permitir "Salida" aunque sea ReadOnly o Rol 2)
           if (isTicketInProcess) {
             submitBtn.textContent = "Finalizar Salida";
-            submitBtn.style.display = "inline-block"; // Mostrar botón para completar
+            submitBtn.style.display = "inline-block";
             cancelBtn.textContent = "Cancelar";
 
-            inputs.forEach((i) => (i.disabled = true)); // Bloquear todo por defecto
+            inputs.forEach((i) => (i.disabled = true));
 
-            // Habilitar SOLO botones de captura para campos vacíos
             weighButtons.forEach((btn) => {
               const inputName = btn.dataset.target;
               const val = item[inputName];
-              // Si el valor es 0 o null, permitir capturar
-              if (!val || val === 0) {
-                btn.disabled = false;
-              } else {
-                btn.disabled = true;
-              }
+              if (!val || val === 0) btn.disabled = false;
+              else btn.disabled = true;
             });
           } else if (canEdit) {
-            // Edición normal
             submitBtn.textContent = "Actualizar";
             inputs.forEach((i) => (i.disabled = false));
             submitBtn.style.display = "inline-block";
             weighButtons.forEach((btn) => (btn.disabled = false));
           } else {
-            // Solo lectura estricta (Ticket Finalizado o Usuario sin permisos)
             inputs.forEach((i) => (i.disabled = true));
             weighButtons.forEach((btn) => (btn.disabled = true));
             submitBtn.style.display = "none";
             cancelBtn.textContent = "Cerrar Detalle";
+          }
+
+          // Productos: mostrar campo código en edición y solo lectura
+          if (resource === "productos") {
+            const codigoInput = form.querySelector('input[name="codigo"]');
+            const codigoLabel = codigoInput?.closest("label");
+            if (codigoLabel) codigoLabel.style.display = "";
+            if (codigoInput) codigoInput.disabled = true;
           }
         }
       };
@@ -311,8 +403,8 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         tbody.innerHTML = "";
         items.forEach((item) => {
           const tr = document.createElement("tr");
+          tr.dataset.id = item.id;
 
-          // Generar celdas de datos
           const dataCells = fields
             .filter((f) => f.type !== "password")
             .map((f) => {
@@ -325,19 +417,17 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             })
             .join("");
 
-          // Generar celda de acciones
           let actionsCell = "";
           if (readOnly) {
-            // Modo Solo Lectura: Botón para poblar el formulario y ver detalles
             actionsCell = `
                 <td>
                   <button data-action="view" data-id="${item.id}">Ver Detalle</button>
                 </td>
               `;
           } else {
-            // Modo Edición: Botones normales
             actionsCell = `
                 <td>
+                  <button data-action="view" data-id="${item.id}">Ver Detalle</button>
                   <button data-action="edit" data-id="${item.id}">Editar</button>
                   <button data-action="delete" data-id="${item.id}">Eliminar</button>
                 </td>
@@ -416,27 +506,44 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         }
       });
 
-      // MODIFICACIÓN DE getFormData para inyectar ESTADO
+      const setProductCodePreview = async () => {
+        if (resource !== "productos") return;
+        if (editingId) return;
+
+        const codigoInput = form.querySelector('input[name="codigo"]');
+        if (!codigoInput) return;
+
+        try {
+          const res = await listResource("productos", {
+            page: 1,
+            per_page: 1,
+            sort: "id",
+            order: "desc",
+          });
+          const items = res.data.items || res.data || [];
+          const lastId = items[0]?.id || 0;
+          const nextId = lastId + 1;
+          const code = `PRD-${String(nextId).padStart(6, "0")}`;
+
+          codigoInput.value = code;
+          codigoInput.disabled = true;
+        } catch {
+          codigoInput.value = "PRD-000000";
+          codigoInput.disabled = true;
+        }
+      };
+
       const getFormData = () => {
         const data = {};
         fields.forEach((f) => {
           if (f.name === "id") return;
           const el = form.querySelector(`[name="${f.name}"]`);
+          if (!el) return;
 
-          // Lógica de Estado Automático para Tickets
-          if (resource === "tickets_pesaje" && f.name === "estado") {
-            const pesoBruto = form.querySelector('[name="peso_bruto"]')?.value;
-            const pesoTara = form.querySelector('[name="peso_tara"]')?.value;
-
-            if (pesoBruto && pesoTara && pesoBruto > 0 && pesoTara > 0) {
-              data["estado"] = "Finalizado";
-            } else {
-              data["estado"] = "En Proceso";
-            }
+          // Productos: NO enviar codigo en creación
+          if (resource === "productos" && f.name === "codigo" && !editingId) {
             return;
           }
-
-          if (!el) return;
 
           if (f.type === "checkbox") {
             data[f.name] = !!el.checked;
@@ -488,6 +595,15 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
           let val = item[f.name];
 
+          // Productos: mostrar código real
+          if (resource === "productos" && f.name === "codigo") {
+            if (el) {
+              el.value =
+                item.codigo || `PRD-${String(item.id).padStart(6, "0")}`;
+            }
+            return;
+          }
+
           // CORRECCIÓN FINAL: Evitar asignar Objetos a inputs normales (evita el crash)
           if (val && typeof val === "object") {
             // Si el campo no es ID pero viene un objeto, lo limpiamos o lo convertimos a string seguro
@@ -505,10 +621,9 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       const clearForm = () => {
         editingId = null;
         form.reset();
-        // Reset custom inputs logic
-        // ...
         if (canCreate) applyCurrentUser();
-        updateFormState(); // Restablecer estado a Create o View
+        updateFormState();
+        hideModal();
       };
 
       const load = async () => {
@@ -574,6 +689,20 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       searchInput.addEventListener("input", (e) => {
         /* ... */
       });
+
+      const newBtn = document.getElementById(`${resource}-new-btn`);
+
+      if (newBtn) {
+        newBtn.style.display = canCreate ? "inline-block" : "none";
+        newBtn.addEventListener("click", () => {
+          editingId = null;
+          form.reset();
+          applyCurrentUser();
+          updateFormState();
+          setProductCodePreview();
+          showModal();
+        });
+      }
 
       // Init
       updateFormState();

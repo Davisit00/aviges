@@ -42,8 +42,8 @@ export const TicketsPesajeInterface = {
       </div>
 
       <!-- MODAL / FORMULARIO (Oculto por defecto) -->
-      <div id="ticket-modal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
-        <div style="background: white; width: 60%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
+    
+        <div id="ticket-modal"style="background: white; width: 60%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
             <h2 id="modal-title">Nuevo Ticket</h2>
             
             <form id="ticket-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -125,7 +125,6 @@ export const TicketsPesajeInterface = {
 
             </form>
         </div>
-      </div>
     </div>
   `,
 
@@ -142,6 +141,28 @@ export const TicketsPesajeInterface = {
     const modal = document.getElementById("ticket-modal");
     const tableBody = document.querySelector("#pending-tickets-table tbody");
     const errorMsg = document.getElementById("error-msg");
+
+    // Overlay (padre del modal)
+    const overlay = document.getElementById("modal-overlay");
+    if (overlay && modal && modal.parentElement !== overlay) {
+      overlay.appendChild(modal);
+      overlay.style.display = "none";
+      overlay.style.position = "fixed";
+      overlay.style.top = "0";
+      overlay.style.left = "0";
+      overlay.style.width = "100%";
+      overlay.style.height = "100%";
+      overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
+      overlay.style.opacity = "1";
+      overlay.style.zIndex = "10000000";
+    }
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        // Clic fuera del modal
+        toggleModal(false);
+      }
+    });
 
     // Inputs
     const inputBruto = document.getElementById("input-bruto");
@@ -166,6 +187,7 @@ export const TicketsPesajeInterface = {
 
     const toggleModal = (show) => {
       modal.style.display = show ? "block" : "none";
+      if (overlay) overlay.style.display = show ? "flex" : "none";
       setError("");
       if (!show) form.reset();
     };
@@ -227,7 +249,10 @@ export const TicketsPesajeInterface = {
           sort: "id",
           order: "desc",
         });
-        pendingTickets = res.data.items || res.data || [];
+        pendingTickets = (res.data.items || res.data || []).filter(
+          (ticket) => ticket.estado === "En Proceso",
+        );
+        console.log("Pending Tickets:", pendingTickets);
         renderTable();
       } catch (error) {
         setError("Error cargando tickets en espera.");
@@ -395,6 +420,7 @@ export const TicketsPesajeInterface = {
 
       inputBruto.value = ticket.peso_bruto || "";
       inputTara.value = ticket.peso_tara || "";
+      inputNeto.value = ticket.peso_neto || "";
 
       // Bloquear edición de datos maestros (vehiculo, chofer...) en el cierre
       document.getElementById("search-vehiculo").disabled = true;

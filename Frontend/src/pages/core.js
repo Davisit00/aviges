@@ -8,6 +8,8 @@ import { VehiculosInterface } from "./vehiculos.js";
 import { ChoferesInterface } from "./choferes.js";
 import { TicketsPesajeInterface } from "./ticketsPesaje.js";
 import { DetallesTransporteAvesInterface } from "./detallesTransporteAves.js";
+import { TicketsPesajePrintInterface } from "./ticketsPesajePrint.js";
+import { TicketsPesajeCrudInterface } from "./ticketsPesajeCrud.js";
 
 const productsButton = document.getElementById("products-button");
 const vehiclesButton = document.getElementById("vehicles-button");
@@ -198,4 +200,16 @@ logoutButton.addEventListener("click", () => {
   logout();
   window.location.href = "../../index.html";
   alert("Has cerrado sesión.");
+});
+
+ticketPrintButton.addEventListener("click", () => {
+  const app = document.getElementById("content-container");
+  render(TicketsPesajePrintInterface.template, app);
+  TicketsPesajePrintInterface.setup();
+});
+
+ticketsButton.addEventListener("click", () => {
+  const app = document.getElementById("content-container");
+  render(TicketsPesajeCrudInterface.template, app);
+  TicketsPesajeCrudInterface.setup(getPermissions("process"));
 });

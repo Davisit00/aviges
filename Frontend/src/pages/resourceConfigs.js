@@ -24,7 +24,7 @@ export const resourceConfigs = {
     title: "Gestión de Productos",
     resource: "productos",
     fields: [
-      { name: "codigo", label: "Código" },
+      { name: "codigo", label: "Código", readOnly: true },
       { name: "nombre", label: "Nombre" },
       { name: "es_ave_viva", label: "Ave Viva", type: "checkbox" },
     ],
