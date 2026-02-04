@@ -413,10 +413,13 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
                 const relItem = relatedData[f.name].find((r) => r.id == val);
                 if (relItem) val = getDisplayLabel(relItem) || val;
               }
+
+              if (f.name.startsWith("fecha_") && val) {
+                val = new Date(val).toLocaleString();
+              }
               return `<td>${val}</td>`;
             })
             .join("");
-
           let actionsCell = "";
           if (readOnly) {
             actionsCell = `
@@ -658,6 +661,13 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         }
 
         const payload = getFormData();
+
+        // --- CAMBIO: Estado de carga (Deshabilitar botón) ---
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "⏳ Procesando...";
+        // ----------------------------------------------------
+
         try {
           if (editingId) {
             // Permitir update si es ticket en proceso, aunque canEdit sea false globalmente
@@ -676,12 +686,20 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             if (!canCreate) throw new Error("No tienes permiso para crear.");
             await createResource(resource, payload);
           }
+
+          // Si todo sale bien, clearForm reiniciará el estado del formulario y botones
           clearForm();
           await load();
         } catch (err) {
           setError(
             err?.response?.data?.error || err.message || "Error al guardar",
           );
+
+          // --- CAMBIO: Restaurar botón SOLAMENTE si hubo error ---
+          // Si hubo error, el usuario necesita el botón activo para corregir y reintentar
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+          // -------------------------------------------------------
         }
       });
 

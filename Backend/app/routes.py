@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
+from sqlalchemy.exc import IntegrityError # <--- AGREGAR ESTO
 import serial
-import serial.tools.list_ports # <--- Agrega esta importación extra
+import serial.tools.list_ports 
+import datetime # Agregado para formatear fechas
 
 from .models import (
     Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
@@ -41,12 +43,16 @@ def serialize(obj):
 @api_bp.route("/auth/login", methods=["POST"])
 def login():
     data = request.get_json(force=True) or {}
+    
+    print("Registering user with data:", data)
     nombre_usuario = data.get("nombre_usuario")
     contrasena = data.get("contrasena")
     if not nombre_usuario or not contrasena:
         return jsonify({"error": "nombre_usuario y contrasena son requeridos"}), 400
 
     user = Usuarios.query.filter_by(nombre_usuario=nombre_usuario).first()
+    print("contraseña:", generate_password_hash("123456"))
+
     if not user or not check_password_hash(user.contrasena_hash, contrasena):
         return jsonify({"error": "Credenciales inválidas"}), 401
 
@@ -65,6 +71,7 @@ def register():
     
     ok, err = validate_payload(Usuarios, data, partial=False)
     if not ok:
+
         return jsonify({"error": err}), 400
 
     service = CRUDService(Usuarios)
@@ -174,6 +181,8 @@ def create_resource(resource):
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
+    print("Creating resource:", resource, "with data:", data)
+    data.pop("fecha_registro", None)
 
     # Solo productos: ignorar codigo del frontend
     if resource == "productos" and "codigo" in data:
@@ -190,16 +199,26 @@ def create_resource(resource):
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
-    service = CRUDService(model)
-    obj = service.create(data)
+    
+    try:
+        service = CRUDService(model)
+        obj = service.create(data)
 
-    # Generar código definitivo basado en ID
-    if resource == "productos":
-        obj.codigo = f"PRD-{obj.id:06d}"
+        # Generar código definitivo basado en ID
+        if resource == "productos":
+            obj.codigo = f"PRD-{obj.id:06d}"
+            from . import db
+            db.session.commit()
+
+        return jsonify(serialize(obj)), 201
+
+    except IntegrityError as e:
         from . import db
-        db.session.commit()
-
-    return jsonify(serialize(obj)), 201
+        db.session.rollback() # Revertir la transacción fallida
+        # Mensaje amigable para el usuario
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, Placa, Código, etc)."}), 409
+    except Exception as e:
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
 @api_bp.route("/<resource>/<int:id_>", methods=["PUT"])
 @jwt_required()
@@ -231,8 +250,13 @@ def delete_resource(resource, id_):
     model = MODEL_MAP.get(resource)
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
-    service = CRUDService(model)
-    obj = service.delete(id_)
+
+    obj = model.query.get_or_404(id_)
+    obj.eliminado = True
+
+    from . import db
+    db.session.commit()
+
     return jsonify(serialize(obj))
 
 # ---------- SERIAL PORT ----------
@@ -311,17 +335,99 @@ def registrar_peso_ticket():
     else:
         ticket.estado = "En Proceso"
 
-    from . import db  # Asegúrate de tener
+    from . import db
+    db.session.commit()
+    
+    return jsonify(serialize(ticket))
+
+# ---------- IMPRESION DE TICKET ----------
+
+@api_bp.route("/tickets_pesaje/<int:ticket_id>/imprimir", methods=["POST"])
+@jwt_required()
+def imprimir_ticket(ticket_id):
+    """
+    Retorna los datos del ticket para que el Frontend genere la impresión.
+    Opcional: Marca en BD que fue impreso (si existiera el campo, ej: ticket.veces_impreso += 1).
+    """
+    ticket = TicketsPesaje.query.get_or_404(ticket_id)
+    
+    # Cargar relaciones manualmente
+    vehiculo = Vehiculos.query.get(ticket.id_vehiculo)
+    chofer = Choferes.query.get(ticket.id_chofer)
+    producto = Productos.query.get(ticket.id_producto)
+    
+    # Datos básicos
+    placa = vehiculo.placa if vehiculo else "N/A"
+    nombre_chofer = f"{chofer.nombre} {chofer.apellido}" if chofer else "N/A"
+    nombre_producto = producto.nombre if producto else "N/A"
+    
+    # Formatear Fechas y Pesos
+    fecha_str = ticket.fecha_registro.strftime("%d/%m/%Y") if ticket.fecha_registro else datetime.datetime.now().strftime("%d/%m/%Y")
+    hora_str = datetime.datetime.now().strftime("%I:%M:%S %p")
+    
+    # Si no tienen valor envia 0
+    p_tara = float(ticket.peso_tara) if ticket.peso_tara is not None else 0.0
+    p_bruto = float(ticket.peso_bruto) if ticket.peso_bruto is not None else 0.0
+
+    # Si hay ambos pesos, usamos el neto de la BD (si existe) o calculamos la diferencia
+    if p_bruto > 0 and p_tara > 0:
+        p_neto = float(ticket.peso_neto) if ticket.peso_neto is not None else abs(p_bruto - p_tara)
+    else:
+        p_neto = 0.0
+
+    # Construir el texto base por si el frontend lo necesita para impresoras térmicas (RAW)
+    ticket_text = f"""
+    AVICOLA LA ROSITA, S.A.
+           MARA
+           
+    ASUNTO: {ticket.tipo_proceso.upper() or 'Entrada/Salida'} DE MERCANCIA
+    --------------------------------
+    TICKET #: {ticket.nro_ticket}
+    FECHA:    {fecha_str}
+    
+    PLACA ->  {placa}
+    CHOFER:   {nombre_chofer}
+    COD:      {nombre_producto}
+    --------------------------------
+    TARA:     {p_tara:,.2f} Kg
+    BRUTO:    {p_bruto:,.2f} Kg
+    HORA:     {hora_str}
+    --------------------------------
+    KILOS NETO -> {p_neto:,.2f} Kg
+    """
+    
+    # LOGICA DE REGISTRO (Opcional):
+    # Aquí podrías guardar un log de auditoría o incrementar un contador en el ticket
+    # ticket.impreso = True
+    # db.session.commit()
+
+    # Devolvemos los datos estructurados y el texto plano
+    return jsonify({
+        "message": "Datos listos para imprimir",
+        "ticket_text": ticket_text, # Útil para que el frontend lo mande directo a una impresora térmica
+        "ticket_data": {            # Útil para armar un PDF o HTML bonito
+            "numero": ticket.nro_ticket,
+            "empresa": "AVICOLA LA ROSITA, S.A.",
+            "fecha": fecha_str,
+            "hora": hora_str,
+            "placa": placa,
+            "chofer": nombre_chofer,
+            "producto": nombre_producto,
+            "tara": p_tara,
+            "bruto": p_bruto,
+            "neto": p_neto
+        }
+    })
 
 @api_bp.route("/tickets_pesaje", methods=["POST"])
 @jwt_required()
 def create_ticket_pesaje():
     from .models import TicketsPesaje
     from . import db
+    import uuid
 
     data = request.get_json(force=True) or {}
 
-    # Elimina nro_ticket y peso_neto si vienen del frontend
     data.pop("nro_ticket", None)
     data.pop("peso_neto", None)
 
@@ -329,12 +435,12 @@ def create_ticket_pesaje():
     if not ok:
         return jsonify({"error": err}), 400
 
-    # Genera un nro_ticket temporal (por ejemplo, "PENDIENTE")
-    ticket = TicketsPesaje(nro_ticket="PENDIENTE", **data)
+    # Temporal único para cumplir UNIQUE
+    temp_code = f"PEND-{uuid.uuid4().hex[:8]}"
+    ticket = TicketsPesaje(nro_ticket=temp_code, **data)
     db.session.add(ticket)
-    db.session.commit()  # Ahora ticket.id existe
+    db.session.commit()
 
-    # Ahora sí puedes asignar el nro_ticket real
     ticket.nro_ticket = f"TKT-{ticket.id:06d}"
     db.session.commit()
 

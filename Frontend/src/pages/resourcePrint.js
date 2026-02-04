@@ -1,4 +1,4 @@
-import { listResource } from "../api.js";
+import { listResource, printTicket } from "../api.js";
 
 const getDisplayLabel = (item) => {
   if (!item) return "";
@@ -24,6 +24,42 @@ export const createPrintPage = ({
   const tableId = `${resource}-print-table`;
   const errorId = `${resource}-print-error`;
   const searchId = `${resource}-print-search`;
+
+  const handlePrintTicket = async (id) => {
+    try {
+      const data = await printTicket(id);
+      console.log("Print ticket response:", data);
+
+      if (data && data.data && data.data.ticket_text) {
+        // Abrir una ventana emergente simple para imprimir el texto preformateado
+        const win = window.open("", "PrintTicket", "width=400,height=600");
+        win.document.write(`
+          <html>
+            <head>
+              <title>Imprimir Ticket</title>
+              <style>
+                body { margin: 0; padding: 10px; font-family: monospace; white-space: pre-wrap; }
+              </style>
+            </head>
+            <body>${data.data.ticket_text}</body>
+          </html>
+        `);
+        win.document.close();
+        win.focus();
+
+        // Pequeño retardo para asegurar que cargue antes de abrir diálogo
+        setTimeout(() => {
+          win.print();
+          win.close();
+        }, 500);
+      } else {
+        alert("No se recibieron datos imprimibles.");
+      }
+    } catch (error) {
+      console.log("Something went wrong while printing the ticket:", error);
+      alert("Error al intentar imprimir el ticket.");
+    }
+  };
 
   return {
     template: `
@@ -69,6 +105,21 @@ export const createPrintPage = ({
             .filter((f) => f.type !== "password")
             .map((f) => {
               let val = item[f.name] ?? "";
+              if (f.name.startsWith("fecha_") && val) {
+                val = new Date(val).toLocaleString();
+              }
+              if (f.name.startsWith("peso_neto")) {
+                const p_bruto = parseFloat(item.peso_bruto) || 0;
+                const p_tara = parseFloat(item.peso_tara) || 0;
+                if (p_bruto > 0 && p_tara > 0) {
+                  val =
+                    item.peso_neto != null
+                      ? parseFloat(item.peso_neto)
+                      : Math.abs(p_bruto - p_tara);
+                } else {
+                  val = 0.0;
+                }
+              }
               return `<td>${val}</td>`;
             })
             .join("");
@@ -106,12 +157,14 @@ export const createPrintPage = ({
 
         const id = btn.dataset.id;
         const item = currentItems.find((i) => i.id == id);
+        console.log("Printing item:", item);
         if (!item) return;
 
         if (typeof onPrint === "function") {
           onPrint(item);
         } else {
-          window.print();
+          // Usamos la función que conecta con el backend
+          handlePrintTicket(id);
         }
       });
 

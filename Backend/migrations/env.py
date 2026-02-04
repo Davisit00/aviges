@@ -51,15 +51,6 @@ def get_metadata():
     return target_db.metadata
 
 
-target_metadata = get_metadata()
-
-
-def include_object(object, name, type_, reflected, compare_to):
-    if type_ == "table" and name == "sysdiagrams":
-        return False
-    return True
-
-
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
 
@@ -108,9 +99,8 @@ def run_migrations_online():
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            include_object=include_object,
+            target_metadata=get_metadata(),
+            **conf_args
         )
 
         with context.begin_transaction():

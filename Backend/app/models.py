@@ -6,6 +6,9 @@ class Roles(db.Model):
     __tablename__ = "Roles"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(50), unique=True, nullable=False)
+    # Agregamos server_default="0"
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Usuarios(db.Model):
     __tablename__ = "Usuarios"
@@ -15,13 +18,16 @@ class Usuarios(db.Model):
     nombre = db.Column(db.String(50), nullable=False)
     apellido = db.Column(db.String(50), nullable=False)
     id_rol = db.Column(db.Integer, db.ForeignKey("Roles.id"), nullable=False)
-    fecha_creacion = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class EmpresasTransporte(db.Model):
     __tablename__ = "Empresas_Transporte"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
     rif = db.Column(db.String(20))
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Granjas(db.Model):
     __tablename__ = "Granjas"
@@ -29,6 +35,8 @@ class Granjas(db.Model):
     nombre = db.Column(db.String(100), nullable=False)
     direccion = db.Column(db.String(200))
     dueno = db.Column(db.String(100))
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Productos(db.Model):
     __tablename__ = "Productos"
@@ -36,6 +44,8 @@ class Productos(db.Model):
     codigo = db.Column(db.String(20), unique=True, nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
     es_ave_viva = db.Column(db.Boolean, server_default="0")
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Galpones(db.Model):
     __tablename__ = "Galpones"
@@ -43,6 +53,8 @@ class Galpones(db.Model):
     id_granja = db.Column(db.Integer, db.ForeignKey("Granjas.id"), nullable=False)
     codigo = db.Column(db.String(20), nullable=False)
     capacidad = db.Column(db.Integer)
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Vehiculos(db.Model):
     __tablename__ = "Vehiculos"
@@ -51,6 +63,8 @@ class Vehiculos(db.Model):
     descripcion = db.Column(db.String(100))
     id_empresa_transporte = db.Column(db.Integer, db.ForeignKey("Empresas_Transporte.id"))
     peso_tara = db.Column(db.Numeric(18, 2), server_default="0.00")
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class Choferes(db.Model):
     __tablename__ = "Choferes"
@@ -59,6 +73,8 @@ class Choferes(db.Model):
     nombre = db.Column(db.String(50), nullable=False)
     apellido = db.Column(db.String(50), nullable=False)
     id_empresa_transporte = db.Column(db.Integer, db.ForeignKey("Empresas_Transporte.id"))
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class TicketsPesaje(db.Model):
     __tablename__ = "Tickets_Pesaje"
@@ -74,8 +90,9 @@ class TicketsPesaje(db.Model):
     peso_neto = db.Column(db.Numeric(19, 2), Computed("peso_bruto - peso_tara"))
     peso_avisado = db.Column(db.Numeric(18, 2))
     cantidad_cestas = db.Column(db.Integer, server_default="0")
-    fecha_creacion = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
     estado = db.Column(db.String(20), server_default="Activo")
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())
 
 class DetallesTransporteAves(db.Model):
     __tablename__ = "Detalles_Transporte_Aves"
@@ -93,3 +110,5 @@ class DetallesTransporteAves(db.Model):
     aves_contadas = db.Column(db.Integer, server_default="0")
     aves_ahogadas_aho = db.Column(db.Integer, server_default="0")
     aves_por_cesta = db.Column(db.Integer)
+    eliminado = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
+    fecha_registro = db.Column(mssql.DATETIME2, server_default=db.func.getdate())

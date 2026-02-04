@@ -43,7 +43,7 @@ export const TicketsPesajeInterface = {
 
       <!-- MODAL / FORMULARIO (Oculto por defecto) -->
     
-        <div id="ticket-modal"style="background: white; width: 60%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
+        <div id="ticket-modal"style="display:none; background: white; width: 60%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
             <h2 id="modal-title">Nuevo Ticket</h2>
             
             <form id="ticket-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -290,7 +290,7 @@ export const TicketsPesajeInterface = {
                 <td>${producto}</td>
                 <td>${chofer}</td>
                 <td>${pesoInicial}</td>
-                <td>${new Date(ticket.fecha_creacion).toLocaleString()}</td>
+                <td>${new Date(ticket.fecha_registro).toLocaleString()}</td>
                 <td><span style="background:orange; padding:2px 5px; border-radius:4px;">${ticket.estado}</span></td>
             `;
         tr.style.cursor = "pointer";
@@ -462,11 +462,13 @@ export const TicketsPesajeInterface = {
       const formData = new FormData(form);
       const data = Object.fromEntries(formData.entries());
 
+      // Capturamos el ID explícitamente antes de cualquier limpieza
+      const ticketId = data.id;
+
       // Elimina nro_ticket si existe (el backend lo asigna)
       delete data.nro_ticket;
-
-      // Elimina id si está vacío o no existe (solo debe enviarse en actualización)
-      if (!data.id) delete data.id;
+      delete data.id;
+      console.log("Form data to save:", data);
 
       // Convierte todos los campos que sean IDs a enteros si existen
       ["id_vehiculo", "id_chofer", "id_producto", "id_usuario"].forEach(
@@ -508,9 +510,16 @@ export const TicketsPesajeInterface = {
             )
               return;
           }
-          const id = data.id;
-          delete data.id; // No enviamos ID en body
-          await updateResource("tickets_pesaje", id, data);
+
+          if (!ticketId) {
+            throw new Error("No se encontró el ID del ticket para actualizar.");
+          }
+
+          // Nota: data.id ya fue borrado arriba, por seguridad nos aseguramos
+          delete data.id;
+
+          await updateResource("tickets_pesaje", ticketId, data);
+
           if (data.estado === "Finalizado")
             alert("Ticket FINALIZADO correctamente.");
         }

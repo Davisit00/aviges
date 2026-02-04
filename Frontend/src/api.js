@@ -37,3 +37,4 @@ export const deleteResource = (resource, id) =>
   api.delete(`/${resource}/${id}`);
 
 export const getWeighFromTruckScale = () => api.get("/serial/read");
+export const printTicket = (id) => api.post(`/tickets_pesaje/${id}/imprimir`);

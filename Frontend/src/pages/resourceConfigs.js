@@ -12,13 +12,16 @@ export const resourceConfigs = {
       { name: "nombre", label: "Nombre" },
       { name: "apellido", label: "Apellido" },
       { name: "id_rol", label: "Rol" },
-      { name: "fecha_creacion", label: "Fecha", readOnly: true },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   roles: {
     title: "Gestión de Roles",
     resource: "roles",
-    fields: [{ name: "nombre", label: "Nombre del Rol" }],
+    fields: [
+      { name: "nombre", label: "Nombre del Rol" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
+    ],
   },
   productos: {
     title: "Gestión de Productos",
@@ -27,6 +30,7 @@ export const resourceConfigs = {
       { name: "codigo", label: "Código", readOnly: true },
       { name: "nombre", label: "Nombre" },
       { name: "es_ave_viva", label: "Ave Viva", type: "checkbox" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   empresas_transporte: {
@@ -35,6 +39,7 @@ export const resourceConfigs = {
     fields: [
       { name: "nombre", label: "Nombre" },
       { name: "rif", label: "RIF" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   granjas: {
@@ -44,6 +49,7 @@ export const resourceConfigs = {
       { name: "nombre", label: "Nombre" },
       { name: "direccion", label: "Dirección" },
       { name: "dueno", label: "Dueño" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   galpones: {
@@ -53,6 +59,7 @@ export const resourceConfigs = {
       { name: "id_granja", label: "Granja" },
       { name: "codigo", label: "Código" },
       { name: "capacidad", label: "Capacidad", type: "number" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   vehiculos: {
@@ -63,6 +70,7 @@ export const resourceConfigs = {
       { name: "descripcion", label: "Descripción" },
       { name: "id_empresa_transporte", label: "Empresa Transporte" },
       { name: "peso_tara", label: "Tara", type: "number" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   choferes: {
@@ -73,6 +81,7 @@ export const resourceConfigs = {
       { name: "nombre", label: "Nombre" },
       { name: "apellido", label: "Apellido" },
       { name: "id_empresa_transporte", label: "Empresa Transporte" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
   tickets_pesaje: {
@@ -105,7 +114,7 @@ export const resourceConfigs = {
       },
       { name: "peso_avisado", label: "Peso Avisado", type: "number" },
       { name: "cantidad_cestas", label: "Cantidad Cestas", type: "number" },
-      { name: "fecha_creacion", label: "Fecha Creación", readOnly: true },
+      { name: "fecha_registro", label: "Fecha Registro", readOnly: true },
       {
         name: "estado",
         label: "Estado",
@@ -147,6 +156,7 @@ export const resourceConfigs = {
       { name: "aves_contadas", label: "Aves Contadas", type: "number" },
       { name: "aves_ahogadas_aho", label: "Aves Ahogadas", type: "number" },
       { name: "aves_por_cesta", label: "Aves por Cesta", type: "number" },
+      { name: "fecha_registro", label: "Fecha", readOnly: true },
     ],
   },
 };
