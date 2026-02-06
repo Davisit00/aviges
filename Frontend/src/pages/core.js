@@ -60,7 +60,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   try {
     const res = await getUserInfo();
     const user = res.data;
-    currentUserRole = user.id_rol;
+    currentUserRole = user.id_roles || user.user_rol;
 
     // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
     if (currentUserRole !== 1) {

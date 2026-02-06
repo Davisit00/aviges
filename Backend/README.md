@@ -71,8 +71,15 @@ JWT_SECRET_KEY=1234
 
 ## 🗄️ Base de datos
 
-1. Ejecuta el script SQL (`BDD.sql`) en SQL Server.
-2. Verifica que la base `GestionRomanaAvicola` exista.
+1. Ejecuta el script SQL (`BDD/AVIGESBDD.sql`) en SQL Server.
+2. Opcionalmente, ejecuta los scripts de inserción de roles y usuarios (`BDD/INSERTAR_ROLES.sql`, `BDD/INSERTAR_USUARIOS.sql`).
+3. Verifica que la base `GestionRomanaAvicola` exista.
+
+**IMPORTANTE:** El nuevo esquema de base de datos utiliza:
+- `is_deleted` en lugar de `eliminado`
+- `created_at` en lugar de `fecha_registro`
+- Tablas normalizadas: Direcciones, Personas, Telefonos, Ubicaciones
+- Nuevas tablas para gestión de viajes: Asignaciones, Lotes, Viajes_tiempos, Viajes_conteos, Viajes_origen, Estadisticas
 
 ## ▶️ Ejecutar el servidor
 
@@ -89,13 +96,14 @@ POST /api/auth/register
 Content-Type: application/json
 
 {
-  "nombre_usuario": "admin",
+  "usuario": "admin",
   "contrasena": "123456",
-  "nombre": "Admin",
-  "apellido": "Principal",
-  "id_rol": 1
+  "id_personas": 1,
+  "id_roles": 1
 }
 ```
+
+**Nota:** El nuevo esquema requiere que primero se cree una entrada en la tabla `Personas` con sus respectivos datos (nombre, apellido, cedula, dirección). Luego se puede crear el usuario referenciando el `id_personas`.
 
 ### Login
 
