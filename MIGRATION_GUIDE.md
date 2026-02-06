@@ -175,6 +175,131 @@ Statistics (auto-calculated by triggers):
 
 ## API Changes
 
+### Combined Endpoints (New!)
+
+To simplify working with normalized data, new combined endpoints have been added that allow creating entities with their related data in a single transaction:
+
+#### Create Usuario with Persona and Direccion
+```http
+POST /api/combined/usuarios
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "usuario": "admin",
+  "contrasena": "123456",
+  "id_roles": 1,
+  "persona": {
+    "nombre": "Admin",
+    "apellido": "Principal",
+    "cedula": "12345678",
+    "direccion": {
+      "pais": "Venezuela",
+      "estado": "Zulia",
+      "municipio": "Maracaibo",
+      "sector": "Centro",
+      "descripcion": "Av. Principal"
+    }
+  }
+}
+```
+
+#### Create Chofer with Persona and Direccion
+```http
+POST /api/combined/choferes
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "id_empresas_transportes": 1,
+  "persona": {
+    "nombre": "Juan",
+    "apellido": "Perez",
+    "cedula": "98765432",
+    "direccion": {
+      "pais": "Venezuela",
+      "estado": "Zulia",
+      "municipio": "Maracaibo",
+      "sector": "Sur",
+      "descripcion": "Calle 1"
+    }
+  }
+}
+```
+
+#### Create Empresa de Transporte with Direccion
+```http
+POST /api/combined/empresas_transporte
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "nombre": "Transportes ABC",
+  "rif": "J-12345678-9",
+  "direccion": {
+    "pais": "Venezuela",
+    "estado": "Zulia",
+    "municipio": "Maracaibo",
+    "sector": "Industrial",
+    "descripcion": "Zona Industrial"
+  }
+}
+```
+
+#### Create Granja with Ubicacion and Direccion
+```http
+POST /api/combined/granjas
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "rif": "J-98765432-1",
+  "ubicacion": {
+    "nombre": "Granja La Esperanza",
+    "tipo": "Granja",
+    "direccion": {
+      "pais": "Venezuela",
+      "estado": "Zulia",
+      "municipio": "Maracaibo",
+      "sector": "Rural",
+      "descripcion": "Km 15 via Perija"
+    }
+  }
+}
+```
+
+#### Get Combined Data
+```http
+GET /api/combined/usuarios/:id
+GET /api/combined/usuarios  (list with pagination)
+GET /api/combined/choferes/:id
+GET /api/combined/choferes  (list with pagination)
+GET /api/combined/granjas/:id
+```
+
+These endpoints return the entity with all related data nested:
+```json
+{
+  "id": 1,
+  "usuario": "admin",
+  "id_personas": 1,
+  "id_roles": 1,
+  "persona": {
+    "id": 1,
+    "nombre": "Admin",
+    "apellido": "Principal",
+    "cedula": "12345678",
+    "direccion": {
+      "id": 1,
+      "pais": "Venezuela",
+      "estado": "Zulia",
+      "municipio": "Maracaibo",
+      "sector": "Centro"
+    }
+  }
+}
+```
+
 ### Authentication Endpoints
 
 #### Login
@@ -255,26 +380,43 @@ All CRUD endpoints remain the same pattern:
 3. ✅ Migration file created in `Backend/migrations/versions/`
 4. ⚠️ **Manual Data Migration Required** - Run migration after backing up database
 
-### Frontend Migration (TODO)
-1. Update `src/pages/resourceConfigs.js`:
-   - Change all `fecha_registro` to `created_at`
-   - Update usuarios config for new structure
-   - Update choferes config to remove personal fields
-   - Update vehiculos config to remove deprecated fields
-   - Add configs for new resources
+### Frontend Migration (COMPLETED)
+1. ✅ Update `src/pages/resourceConfigs.js`:
+   - Changed all `fecha_registro` to `created_at`
+   - Updated usuarios config to use nested fields (persona.nombre, persona.direccion.*)
+   - Updated choferes config to use nested persona fields
+   - Updated empresas_transporte to use nested direccion fields
+   - Updated granjas to use nested ubicacion and direccion fields
+   - Removed deprecated fields (codigo, es_ave_viva, peso_tara, descripcion)
+   - Updated tickets_pesaje for new structure
 
-2. Update `src/pages/core.js`:
-   - Change `id_rol` to `id_roles`
+2. ✅ Update `src/pages/resourceCrud.js`:
+   - Added support for nested field handling (dotted notation)
+   - Updated `getFormData()` to build nested objects from form inputs
+   - Updated `setFormData()` to populate form from nested objects
+   - Updated `getDisplayLabel()` to handle combined endpoint responses
+   - Updated FK resource mapping for new table names
+   - Changed `fecha_registro` checks to `created_at`
 
-3. Update `src/pages/resourceCrud.js`:
-   - Change `nombre_usuario` to `usuario`
-   - Change `fecha_registro` to `created_at`
+3. ✅ Update `src/pages/core.js`:
+   - Changed `id_rol` to `id_roles` for role checks
+   - Added fallback to `user_rol` from token validation
 
-4. Update `src/pages/resourcePrint.js`:
-   - Change `nombre_usuario` to `usuario`
+4. ✅ Update `src/pages/resourcePrint.js`:
+   - Updated `getDisplayLabel()` to handle combined responses
 
-5. Update `src/pages/ticketsPesaje.js`:
-   - Change `fecha_registro` to `created_at`
+5. ✅ Update `src/pages/ticketsPesaje.js`:
+   - Changed `fecha_registro` to `created_at` with fallback
+
+### Frontend Usage
+
+The Frontend now automatically uses the combined endpoints for usuarios, choferes, empresas_transporte, and granjas. When creating these entities:
+
+1. **Creating a User**: Simply fill in the form fields including nombre, apellido, cedula, and address fields. The Frontend will automatically structure the data for the combined endpoint.
+
+2. **Creating a Chofer**: Fill in persona details and address. The system creates Direccion → Persona → Chofer in one transaction.
+
+3. **Viewing Data**: When viewing users or choferes, the system automatically fetches and displays nested persona data.
 
 ## Breaking Changes Summary
 
@@ -311,7 +453,9 @@ New stored procedure:
 ## Testing Checklist
 
 ### Backend Testing
-- [ ] Test authentication (login, register, validate)
+- [x] Combined endpoints created and syntax-validated
+- [ ] Test authentication (login, register, validate) - requires database
+- [ ] Test combined endpoints with actual database
 - [ ] Test CRUD operations for all existing resources
 - [ ] Test CRUD operations for new resources
 - [ ] Test soft delete (is_deleted flag)
@@ -319,8 +463,13 @@ New stored procedure:
 - [ ] Test ticket creation with new structure
 
 ### Frontend Testing
-- [ ] Test login with new field names
-- [ ] Test user management
+- [x] Updated field configurations
+- [x] Added nested field support
+- [ ] Test login with new field names - requires running application
+- [ ] Test user management with combined endpoints
+- [ ] Test chofer management with combined endpoints
+- [ ] Test empresa transporte management
+- [ ] Test granja management
 - [ ] Test all resource CRUD pages
 - [ ] Test ticket creation workflow
 - [ ] Verify display of timestamps (created_at)
