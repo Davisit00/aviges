@@ -29,9 +29,12 @@ class Telefonos(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_personas = db.Column(db.Integer, db.ForeignKey("Personas.id"), nullable=False)
     numero = db.Column(db.String(20), nullable=False)
-    estado = db.Column(db.String(255), CheckConstraint("estado IN ('Celular', 'Casa', 'Trabajo')"), nullable=False)
+    estado = db.Column(db.String(255), nullable=False)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("estado IN ('Celular', 'Casa', 'Trabajo')", name='ck_telefonos_estado'),
+    )
 
 class Roles(db.Model):
     __tablename__ = "Roles"
@@ -98,9 +101,12 @@ class Ubicaciones(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_direcciones = db.Column(db.Integer, db.ForeignKey("Direcciones.id"), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
-    tipo = db.Column(db.String(255), CheckConstraint("tipo IN ('Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen')"), nullable=False)
+    tipo = db.Column(db.String(255), nullable=False)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("tipo IN ('Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen')", name='ck_ubicaciones_tipo'),
+    )
 
 class Granjas(db.Model):
     __tablename__ = "Granjas"
@@ -139,15 +145,19 @@ class TicketPesaje(db.Model):
     id_origen = db.Column(db.Integer, db.ForeignKey("Ubicaciones.id"), nullable=False)
     id_destino = db.Column(db.Integer, db.ForeignKey("Ubicaciones.id"), nullable=False)
     nro_ticket = db.Column(db.String(50), unique=True, nullable=False)
-    tipo = db.Column(db.String(255), CheckConstraint("tipo IN ('Entrada', 'Salida')"), nullable=False)
+    tipo = db.Column(db.String(255), nullable=False)
     peso_bruto = db.Column(db.Numeric(10, 2), nullable=False)
     peso_tara = db.Column(db.Numeric(10, 2))
     peso_neto = db.Column(db.Numeric(10, 2))
-    estado = db.Column(db.String(255), CheckConstraint("estado IN ('En proceso', 'Finalizado', 'Anulado')"), nullable=False)
+    estado = db.Column(db.String(255), nullable=False)
     fecha_primer_peso = db.Column(db.DateTime, nullable=False)
     fecha_segundo_peso = db.Column(db.DateTime)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
+    __table_args__ = (
+        CheckConstraint("tipo IN ('Entrada', 'Salida')", name='ck_ticket_pesaje_tipo'),
+        CheckConstraint("estado IN ('En proceso', 'Finalizado', 'Anulado')", name='ck_ticket_pesaje_estado'),
+    )
 
 class ViajesTiempos(db.Model):
     __tablename__ = "Viajes_tiempos"
