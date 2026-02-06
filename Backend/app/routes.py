@@ -330,8 +330,12 @@ def create_granja_combined():
         # Validate required fields
         if not data.get("rif"):
             return jsonify({"error": "rif es requerido"}), 400
-        if not ubicacion_data.get("nombre") or not ubicacion_data.get("tipo"):
-            return jsonify({"error": "nombre y tipo de ubicacion son requeridos"}), 400
+        if not ubicacion_data.get("nombre"):
+            return jsonify({"error": "nombre de ubicacion es requerido"}), 400
+        
+        # Automatically set tipo to "Granja" if not provided
+        if "tipo" not in ubicacion_data:
+            ubicacion_data["tipo"] = "Granja"
         
         # Create Direccion
         direccion = Direcciones(**direccion_data)
@@ -371,7 +375,7 @@ def get_usuario_combined(usuario_id):
     """Get Usuario with complete Persona and Direccion data"""
     usuario = Usuarios.query.get_or_404(usuario_id)
     persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
-    direccion = Direcciones.query.get(persona.id_direcciones) if persona else None
+    direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
     
     result = serialize(usuario)
     if persona:
@@ -387,7 +391,7 @@ def get_chofer_combined(chofer_id):
     """Get Chofer with complete Persona and Direccion data"""
     chofer = Choferes.query.get_or_404(chofer_id)
     persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
-    direccion = Direcciones.query.get(persona.id_direcciones) if persona else None
+    direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
     
     result = serialize(chofer)
     if persona:
@@ -403,7 +407,7 @@ def get_granja_combined(granja_id):
     """Get Granja with complete Ubicacion and Direccion data"""
     granja = Granjas.query.get_or_404(granja_id)
     ubicacion = Ubicaciones.query.get(granja.id_ubicaciones) if granja.id_ubicaciones else None
-    direccion = Direcciones.query.get(ubicacion.id_direcciones) if ubicacion else None
+    direccion = Direcciones.query.get(ubicacion.id_direcciones) if (ubicacion and ubicacion.id_direcciones) else None
     
     result = serialize(granja)
     if ubicacion:

@@ -57,7 +57,6 @@ export const resourceConfigs = {
     fields: [
       { name: "ubicacion.nombre", label: "Nombre" },
       { name: "rif", label: "RIF" },
-      { name: "ubicacion.tipo", label: "Tipo", defaultValue: "Granja", readOnly: true },
       { name: "ubicacion.direccion.pais", label: "País", defaultValue: "Venezuela" },
       { name: "ubicacion.direccion.estado", label: "Estado" },
       { name: "ubicacion.direccion.municipio", label: "Municipio" },
