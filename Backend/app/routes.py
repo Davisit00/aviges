@@ -8,7 +8,9 @@ import datetime # Agregado para formatear fechas
 
 from .models import (
     Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
-    Vehiculos, Choferes, TicketsPesaje, DetallesTransporteAves
+    Vehiculos, Choferes, TicketPesaje, Direcciones, Personas, Telefonos,
+    Ubicaciones, Asignaciones, Lotes, ViajesTiempos, ViajesConteos, 
+    ViajesOrigen, Estadisticas
 )
 from .services.crud import CRUDService
 from .services.validation import validate_payload
@@ -32,8 +34,17 @@ MODEL_MAP = {
     "galpones": Galpones,
     "vehiculos": Vehiculos,
     "choferes": Choferes,
-    "tickets_pesaje": TicketsPesaje,
-    "detalles_transporte_aves": DetallesTransporteAves,
+    "tickets_pesaje": TicketPesaje,
+    "direcciones": Direcciones,
+    "personas": Personas,
+    "telefonos": Telefonos,
+    "ubicaciones": Ubicaciones,
+    "asignaciones": Asignaciones,
+    "lotes": Lotes,
+    "viajes_tiempos": ViajesTiempos,
+    "viajes_conteos": ViajesConteos,
+    "viajes_origen": ViajesOrigen,
+    "estadisticas": Estadisticas,
 }
 
 def serialize(obj):
@@ -44,20 +55,20 @@ def serialize(obj):
 def login():
     data = request.get_json(force=True) or {}
     
-    print("Registering user with data:", data)
-    nombre_usuario = data.get("nombre_usuario")
+    print("Logging in user with data:", data)
+    usuario = data.get("usuario")
     contrasena = data.get("contrasena")
-    if not nombre_usuario or not contrasena:
-        return jsonify({"error": "nombre_usuario y contrasena son requeridos"}), 400
+    if not usuario or not contrasena:
+        return jsonify({"error": "usuario y contrasena son requeridos"}), 400
 
-    user = Usuarios.query.filter_by(nombre_usuario=nombre_usuario).first()
-    print("contraseña:", generate_password_hash("123456"))
+    user = Usuarios.query.filter_by(usuario=usuario).first()
+    print("contraseña hash:", generate_password_hash("123456"))
 
-    if not user or not check_password_hash(user.contrasena_hash, contrasena):
+    if not user or not check_password_hash(user.contraseña, contrasena):
         return jsonify({"error": "Credenciales inválidas"}), 401
 
-    # Incluimos el id_rol en los claims del token
-    token = create_access_token(identity=str(user.id), additional_claims={"id_rol": user.id_rol})
+    # Incluimos el id_roles en los claims del token
+    token = create_access_token(identity=str(user.id), additional_claims={"id_roles": user.id_roles})
     return jsonify({"access_token": token})
 
 @api_bp.route("/auth/register", methods=["POST"])
@@ -66,8 +77,8 @@ def register():
     if "contrasena" not in data:
         return jsonify({"error": "contrasena es requerida"}), 400
 
-    # CAMBIO: Usar la clave correcta del modelo (contrasena_hash)
-    data["contrasena_hash"] = generate_password_hash(data.pop("contrasena"))
+    # CAMBIO: Usar la clave correcta del modelo (contraseña)
+    data["contraseña"] = generate_password_hash(data.pop("contrasena"))
     
     ok, err = validate_payload(Usuarios, data, partial=False)
     if not ok:
@@ -82,7 +93,7 @@ def register():
 @jwt_required()
 def validate_token():
     user_id = get_jwt_identity()
-    user_rol= get_jwt().get("id_rol")
+    user_rol= get_jwt().get("id_roles")
     return jsonify({"valid": True, "user_id": user_id, "user_rol": user_rol})
 
 @api_bp.route("/auth/logout", methods=["POST"])
@@ -182,19 +193,11 @@ def create_resource(resource):
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
     print("Creating resource:", resource, "with data:", data)
-    data.pop("fecha_registro", None)
-
-    # Solo productos: ignorar codigo del frontend
-    if resource == "productos" and "codigo" in data:
-        data.pop("codigo")
+    data.pop("created_at", None)
 
     # CAMBIO: Manejo especial para usuarios (hashear contraseña)
     if resource == "usuarios" and "contrasena" in data:
-        data["contrasena_hash"] = generate_password_hash(data.pop("contrasena"))
-
-    # Productos: codigo temporal para cumplir NOT NULL
-    if resource == "productos":
-        data["codigo"] = "PENDIENTE"
+        data["contraseña"] = generate_password_hash(data.pop("contrasena"))
 
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
@@ -203,12 +206,6 @@ def create_resource(resource):
     try:
         service = CRUDService(model)
         obj = service.create(data)
-
-        # Generar código definitivo basado en ID
-        if resource == "productos":
-            obj.codigo = f"PRD-{obj.id:06d}"
-            from . import db
-            db.session.commit()
 
         return jsonify(serialize(obj)), 201
 
@@ -235,7 +232,7 @@ def update_resource(resource, id_):
     if resource == "usuarios" and "contrasena" in data:
         pwd = data.pop("contrasena")
         if pwd:
-            data["contrasena_hash"] = generate_password_hash(pwd)
+            data["contraseña"] = generate_password_hash(pwd)
 
     ok, err = validate_payload(model, data, partial=True)
     if not ok:
@@ -252,7 +249,7 @@ def delete_resource(resource, id_):
         return jsonify({"error": "Recurso no encontrado"}), 404
 
     obj = model.query.get_or_404(id_)
-    obj.eliminado = True
+    obj.is_deleted = True
 
     from . import db
     db.session.commit()
@@ -349,20 +346,24 @@ def imprimir_ticket(ticket_id):
     Retorna los datos del ticket para que el Frontend genere la impresión.
     Opcional: Marca en BD que fue impreso (si existiera el campo, ej: ticket.veces_impreso += 1).
     """
-    ticket = TicketsPesaje.query.get_or_404(ticket_id)
+    ticket = TicketPesaje.query.get_or_404(ticket_id)
     
-    # Cargar relaciones manualmente
-    vehiculo = Vehiculos.query.get(ticket.id_vehiculo)
-    chofer = Choferes.query.get(ticket.id_chofer)
-    producto = Productos.query.get(ticket.id_producto)
-    
+    # TODO: The new schema uses Asignaciones which links vehiculo and chofer
+    # For now, we'll need to handle this differently once we migrate the actual data
+    # This is a compatibility issue that will need to be addressed
+    # vehiculo = Vehiculos.query.get(ticket.id_vehiculo)
+    # chofer = Choferes.query.get(ticket.id_chofer)
     # Datos básicos
-    placa = vehiculo.placa if vehiculo else "N/A"
-    nombre_chofer = f"{chofer.nombre} {chofer.apellido}" if chofer else "N/A"
+    # TODO: Needs to be updated to work with new schema using Asignaciones
+    # placa = vehiculo.placa if vehiculo else "N/A"
+    # nombre_chofer = f"{chofer.nombre} {chofer.apellido}" if chofer else "N/A"
+    placa = "N/A"  # Temporary placeholder
+    nombre_chofer = "N/A"  # Temporary placeholder
+    producto = Productos.query.get(ticket.id_producto)
     nombre_producto = producto.nombre if producto else "N/A"
     
     # Formatear Fechas y Pesos
-    fecha_str = ticket.fecha_registro.strftime("%d/%m/%Y") if ticket.fecha_registro else datetime.datetime.now().strftime("%d/%m/%Y")
+    fecha_str = ticket.created_at.strftime("%d/%m/%Y") if ticket.created_at else datetime.datetime.now().strftime("%d/%m/%Y")
     hora_str = datetime.datetime.now().strftime("%I:%M:%S %p")
     
     # Si no tienen valor envia 0
@@ -380,7 +381,7 @@ def imprimir_ticket(ticket_id):
 AVICOLA LA ROSITA, S.A.
         MARA I
            
-ASUNTO: {ticket.tipo_proceso.upper() or 'Entrada/Salida'} DE MERCANCIA
+ASUNTO: {ticket.tipo.upper() or 'Entrada/Salida'} DE MERCANCIA
 --------------------------
 TICKET #: {ticket.nro_ticket}
 FECHA:    {fecha_str}
@@ -406,7 +407,7 @@ KILOS NETO -> {p_neto:,.2f} Kg
         "nro_ticket": ticket.nro_ticket,
         "empresa": "AVICOLA LA ROSITA, S.A.",
         "sucursal": "MARA I",
-        "tipo_proceso": ticket.tipo_proceso.upper() or 'ENTRADA/SALIDA',
+        "tipo_proceso": ticket.tipo.upper() or 'ENTRADA/SALIDA',
         "fecha": fecha_str,
         "hora": hora_str,
         "placa": placa,
