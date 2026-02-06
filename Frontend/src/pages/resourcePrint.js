@@ -2,7 +2,17 @@ import { listResource, printTicket } from "../api.js";
 
 const getDisplayLabel = (item) => {
   if (!item) return "";
-  if (item.nombre_usuario) return item.nombre_usuario;
+  // Handle combined endpoint responses with persona data
+  if (item.persona) {
+    const persona = item.persona;
+    return `${persona.cedula || ""} - ${persona.nombre || ""} ${persona.apellido || ""}`.trim();
+  }
+  // Handle combined endpoint responses with ubicacion data
+  if (item.ubicacion) {
+    return item.ubicacion.nombre || item.id;
+  }
+  // Legacy and new field support
+  if (item.usuario) return item.usuario;
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;

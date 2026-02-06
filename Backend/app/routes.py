@@ -103,6 +103,368 @@ def logout():
     jwt_blocklist.add(jti)
     return jsonify({"logged_out": True})
 
+# ---------- COMBINED ENDPOINTS ----------
+# These endpoints handle creating normalized entities together
+
+@api_bp.route("/combined/usuarios", methods=["POST"])
+@jwt_required()
+def create_usuario_combined():
+    """
+    Create a Usuario along with its Persona and Direccion in a single transaction.
+    Expected payload:
+    {
+        "usuario": "admin",
+        "contrasena": "123456",
+        "id_roles": 1,
+        "persona": {
+            "nombre": "Admin",
+            "apellido": "Principal",
+            "cedula": "12345678",
+            "direccion": {
+                "pais": "Venezuela",
+                "estado": "Zulia",
+                "municipio": "Maracaibo",
+                "sector": "Centro",
+                "descripcion": "Av. Principal"
+            }
+        }
+    }
+    """
+    from . import db
+    data = request.get_json(force=True) or {}
+    
+    try:
+        # Extract nested data
+        persona_data = data.pop("persona", {})
+        direccion_data = persona_data.pop("direccion", {})
+        
+        # Validate required fields
+        if not data.get("usuario") or not data.get("contrasena"):
+            return jsonify({"error": "usuario y contrasena son requeridos"}), 400
+        if not persona_data.get("nombre") or not persona_data.get("apellido") or not persona_data.get("cedula"):
+            return jsonify({"error": "nombre, apellido y cedula de la persona son requeridos"}), 400
+        if not direccion_data.get("pais") or not direccion_data.get("estado"):
+            return jsonify({"error": "pais y estado de la direccion son requeridos"}), 400
+        
+        # Create Direccion
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()  # Get the ID without committing
+        
+        # Create Persona
+        persona_data["id_direcciones"] = direccion.id
+        persona = Personas(**persona_data)
+        db.session.add(persona)
+        db.session.flush()
+        
+        # Create Usuario
+        data["id_personas"] = persona.id
+        data["contraseña"] = generate_password_hash(data.pop("contrasena"))
+        usuario = Usuarios(**data)
+        db.session.add(usuario)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "usuario": serialize(usuario),
+            "persona": serialize(persona),
+            "direccion": serialize(direccion)
+        }), 201
+        
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Usuario, Cédula, etc)."}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+@api_bp.route("/combined/choferes", methods=["POST"])
+@jwt_required()
+def create_chofer_combined():
+    """
+    Create a Chofer along with its Persona and Direccion in a single transaction.
+    Expected payload:
+    {
+        "id_empresas_transportes": 1,
+        "persona": {
+            "nombre": "Juan",
+            "apellido": "Perez",
+            "cedula": "12345678",
+            "direccion": {
+                "pais": "Venezuela",
+                "estado": "Zulia",
+                "municipio": "Maracaibo",
+                "sector": "Centro",
+                "descripcion": "Calle 1"
+            }
+        }
+    }
+    """
+    from . import db
+    data = request.get_json(force=True) or {}
+    
+    try:
+        # Extract nested data
+        persona_data = data.pop("persona", {})
+        direccion_data = persona_data.pop("direccion", {})
+        
+        # Validate required fields
+        if not data.get("id_empresas_transportes"):
+            return jsonify({"error": "id_empresas_transportes es requerido"}), 400
+        if not persona_data.get("nombre") or not persona_data.get("apellido") or not persona_data.get("cedula"):
+            return jsonify({"error": "nombre, apellido y cedula de la persona son requeridos"}), 400
+        
+        # Create Direccion
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        
+        # Create Persona
+        persona_data["id_direcciones"] = direccion.id
+        persona = Personas(**persona_data)
+        db.session.add(persona)
+        db.session.flush()
+        
+        # Create Chofer
+        data["id_personas"] = persona.id
+        chofer = Choferes(**data)
+        db.session.add(chofer)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "chofer": serialize(chofer),
+            "persona": serialize(persona),
+            "direccion": serialize(direccion)
+        }), 201
+        
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, etc)."}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+@api_bp.route("/combined/empresas_transporte", methods=["POST"])
+@jwt_required()
+def create_empresa_transporte_combined():
+    """
+    Create an Empresa de Transporte along with its Direccion.
+    Expected payload:
+    {
+        "nombre": "Transportes ABC",
+        "rif": "J-12345678-9",
+        "direccion": {
+            "pais": "Venezuela",
+            "estado": "Zulia",
+            "municipio": "Maracaibo",
+            "sector": "Industrial",
+            "descripcion": "Zona Industrial"
+        }
+    }
+    """
+    from . import db
+    data = request.get_json(force=True) or {}
+    
+    try:
+        # Extract nested data
+        direccion_data = data.pop("direccion", {})
+        
+        # Validate required fields
+        if not data.get("nombre") or not data.get("rif"):
+            return jsonify({"error": "nombre y rif son requeridos"}), 400
+        
+        # Create Direccion
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        
+        # Create Empresa
+        data["id_direcciones"] = direccion.id
+        empresa = EmpresasTransporte(**data)
+        db.session.add(empresa)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "empresa": serialize(empresa),
+            "direccion": serialize(direccion)
+        }), 201
+        
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (RIF, etc)."}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+@api_bp.route("/combined/granjas", methods=["POST"])
+@jwt_required()
+def create_granja_combined():
+    """
+    Create a Granja along with its Ubicacion and Direccion.
+    Expected payload:
+    {
+        "rif": "J-98765432-1",
+        "ubicacion": {
+            "nombre": "Granja La Esperanza",
+            "tipo": "Granja",
+            "direccion": {
+                "pais": "Venezuela",
+                "estado": "Zulia",
+                "municipio": "Maracaibo",
+                "sector": "Rural",
+                "descripcion": "Km 15 via Perija"
+            }
+        }
+    }
+    """
+    from . import db
+    data = request.get_json(force=True) or {}
+    
+    try:
+        # Extract nested data
+        ubicacion_data = data.pop("ubicacion", {})
+        direccion_data = ubicacion_data.pop("direccion", {})
+        
+        # Validate required fields
+        if not data.get("rif"):
+            return jsonify({"error": "rif es requerido"}), 400
+        if not ubicacion_data.get("nombre") or not ubicacion_data.get("tipo"):
+            return jsonify({"error": "nombre y tipo de ubicacion son requeridos"}), 400
+        
+        # Create Direccion
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        
+        # Create Ubicacion
+        ubicacion_data["id_direcciones"] = direccion.id
+        ubicacion = Ubicaciones(**ubicacion_data)
+        db.session.add(ubicacion)
+        db.session.flush()
+        
+        # Create Granja
+        data["id_ubicaciones"] = ubicacion.id
+        granja = Granjas(**data)
+        db.session.add(granja)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "granja": serialize(granja),
+            "ubicacion": serialize(ubicacion),
+            "direccion": serialize(direccion)
+        }), 201
+        
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (RIF, etc)."}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+# Combined GET endpoints for retrieving normalized data with joins
+@api_bp.route("/combined/usuarios/<int:usuario_id>", methods=["GET"])
+@jwt_required()
+def get_usuario_combined(usuario_id):
+    """Get Usuario with complete Persona and Direccion data"""
+    usuario = Usuarios.query.get_or_404(usuario_id)
+    persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
+    direccion = Direcciones.query.get(persona.id_direcciones) if persona else None
+    
+    result = serialize(usuario)
+    if persona:
+        result["persona"] = serialize(persona)
+        if direccion:
+            result["persona"]["direccion"] = serialize(direccion)
+    
+    return jsonify(result)
+
+@api_bp.route("/combined/choferes/<int:chofer_id>", methods=["GET"])
+@jwt_required()
+def get_chofer_combined(chofer_id):
+    """Get Chofer with complete Persona and Direccion data"""
+    chofer = Choferes.query.get_or_404(chofer_id)
+    persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
+    direccion = Direcciones.query.get(persona.id_direcciones) if persona else None
+    
+    result = serialize(chofer)
+    if persona:
+        result["persona"] = serialize(persona)
+        if direccion:
+            result["persona"]["direccion"] = serialize(direccion)
+    
+    return jsonify(result)
+
+@api_bp.route("/combined/granjas/<int:granja_id>", methods=["GET"])
+@jwt_required()
+def get_granja_combined(granja_id):
+    """Get Granja with complete Ubicacion and Direccion data"""
+    granja = Granjas.query.get_or_404(granja_id)
+    ubicacion = Ubicaciones.query.get(granja.id_ubicaciones) if granja.id_ubicaciones else None
+    direccion = Direcciones.query.get(ubicacion.id_direcciones) if ubicacion else None
+    
+    result = serialize(granja)
+    if ubicacion:
+        result["ubicacion"] = serialize(ubicacion)
+        if direccion:
+            result["ubicacion"]["direccion"] = serialize(direccion)
+    
+    return jsonify(result)
+
+@api_bp.route("/combined/usuarios", methods=["GET"])
+@jwt_required()
+def list_usuarios_combined():
+    """List all Usuarios with their Persona data"""
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = max(1, min(per_page, 100))
+    
+    pagination = Usuarios.query.order_by(Usuarios.id).paginate(page=page, per_page=per_page, error_out=False)
+    
+    items = []
+    for usuario in pagination.items:
+        result = serialize(usuario)
+        persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
+        if persona:
+            result["persona"] = serialize(persona)
+        items.append(result)
+    
+    return jsonify({
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": pagination.total,
+        "pages": pagination.pages
+    })
+
+@api_bp.route("/combined/choferes", methods=["GET"])
+@jwt_required()
+def list_choferes_combined():
+    """List all Choferes with their Persona data"""
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    per_page = max(1, min(per_page, 100))
+    
+    pagination = Choferes.query.order_by(Choferes.id).paginate(page=page, per_page=per_page, error_out=False)
+    
+    items = []
+    for chofer in pagination.items:
+        result = serialize(chofer)
+        persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
+        if persona:
+            result["persona"] = serialize(persona)
+        items.append(result)
+    
+    return jsonify({
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": pagination.total,
+        "pages": pagination.pages
+    })
+
 # ---------- CRUD ----------
 @api_bp.route("/<resource>", methods=["GET"])
 @jwt_required()

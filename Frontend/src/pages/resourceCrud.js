@@ -12,14 +12,27 @@ const getRelatedResourceName = (fieldName) => {
   const singular = fieldName.replace("id_", "");
   const map = {
     granja: "granjas",
-    empresa_transporte: "empresas_transporte",
+    empresas_transportes: "empresas_transporte",
     galpon: "galpones",
+    galpones: "galpones",
     ticket_pesaje: "tickets_pesaje",
-    usuario: "usuarios",
+    ticket: "tickets_pesaje",
+    usuarios_primer_peso: "combined/usuarios",
+    usuarios_segundo_peso: "combined/usuarios",
+    usuario: "combined/usuarios",
     producto: "productos",
     vehiculo: "vehiculos",
-    chofer: "choferes",
+    vehiculos: "vehiculos",
+    chofer: "combined/choferes",
+    choferes: "combined/choferes",
+    roles: "roles",
     rol: "roles",
+    personas: "personas",
+    asignaciones: "asignaciones",
+    ubicaciones: "ubicaciones",
+    origen: "ubicaciones",
+    destino: "ubicaciones",
+    lote: "lotes",
   };
   return map[singular] || singular + "s";
 };
@@ -27,7 +40,17 @@ const getRelatedResourceName = (fieldName) => {
 // Helper to determine what text to show in the dropdown/table
 const getDisplayLabel = (item) => {
   if (!item) return "";
-  if (item.nombre_usuario) return item.nombre_usuario;
+  // Handle combined endpoint responses with persona data
+  if (item.persona) {
+    const persona = item.persona;
+    return `${persona.cedula || ""} - ${persona.nombre || ""} ${persona.apellido || ""}`.trim();
+  }
+  // Handle combined endpoint responses with ubicacion data
+  if (item.ubicacion) {
+    return item.ubicacion.nombre || item.id;
+  }
+  // Legacy field support
+  if (item.usuario) return item.usuario;
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;
@@ -68,7 +91,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             </button>
         `;
     }
-    if (f.name === "fecha_registro" || f.label === "Fecha") return "";
+    if (f.name === "created_at" || f.name.endsWith(".created_at") || f.label === "Fecha") return "";
 
     if (f.name.startsWith("id_") && !f.hidden) {
       const listId = `list-${f.name}`;
@@ -558,6 +581,32 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         const data = {};
         fields.forEach((f) => {
           if (f.name === "id") return;
+          
+          // Handle nested fields (e.g., "persona.nombre" -> data.persona = {nombre: value})
+          if (f.name.includes(".")) {
+            const parts = f.name.split(".");
+            const el = form.querySelector(`[name="${f.name}"]`);
+            if (!el) return;
+            
+            let current = data;
+            for (let i = 0; i < parts.length - 1; i++) {
+              if (!current[parts[i]]) current[parts[i]] = {};
+              current = current[parts[i]];
+            }
+            
+            const lastPart = parts[parts.length - 1];
+            if (f.type === "checkbox") {
+              current[lastPart] = !!el.checked;
+            } else {
+              if ((lastPart.startsWith("id_") || f.type === "number") && el.value !== "") {
+                current[lastPart] = parseFloat(el.value);
+              } else {
+                current[lastPart] = el.value;
+              }
+            }
+            return;
+          }
+          
           const el = form.querySelector(`[name="${f.name}"]`);
           if (!el) return;
 
@@ -584,6 +633,29 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
       const setFormData = (item) => {
         fields.forEach((f) => {
+          // Handle nested fields (e.g., "persona.nombre")
+          if (f.name.includes(".")) {
+            const el = form.querySelector(`[name="${f.name}"]`);
+            if (!el) return;
+            
+            // Navigate through the nested object
+            const parts = f.name.split(".");
+            let val = item;
+            for (const part of parts) {
+              val = val?.[part];
+              if (val === undefined) break;
+            }
+            
+            if (f.type === "password") {
+              el.value = "";
+            } else if (f.type === "checkbox") {
+              el.checked = !!val;
+            } else {
+              el.value = val ?? (f.defaultValue || "");
+            }
+            return;
+          }
+          
           const el = form.querySelector(`[name="${f.name}"]`);
 
           if (f.name.startsWith("id_")) {
