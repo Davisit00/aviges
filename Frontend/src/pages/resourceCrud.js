@@ -47,6 +47,13 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
   const searchId = `${resource}-search`;
   const modalId = `${resource}-modal`;
 
+  // Configuración específica para formularios densos
+  const isComplexForm = resource === "detalles_transporte_aves";
+  const modalWidth = isComplexForm ? "800px" : "500px";
+  const formStyle = isComplexForm ? "grid-template-columns: 1fr 1fr;" : "";
+  // Si es complejo, reseteamos el span para que quepan 2 en una fila. Si no, dejamos que el CSS global aplique (full width)
+  const labelStyleExtra = isComplexForm ? "grid-column: span 1;" : "";
+
   const renderField = (f) => {
     const type = f.type || "text";
     const readOnly = f.readOnly ? "readonly" : "";
@@ -61,11 +68,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             </button>
         `;
     }
+    if (f.name === "fecha_registro" || f.label === "Fecha") return "";
 
     if (f.name.startsWith("id_") && !f.hidden) {
       const listId = `list-${f.name}`;
       return `
-        <label>
+        <label style="${labelStyleExtra}">
           ${f.label}
           <!-- Input visible para buscar -->
           <input 
@@ -86,12 +94,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     }
 
     if (type === "checkbox") {
-      return `<label><input type="checkbox" name="${f.name}" ${hidden} /> ${f.label}</label>`;
+      return `<label style="display: flex; flex-direction: row; align-items: center; gap: 5px; ${labelStyleExtra}">${f.label} <input type="checkbox" name="${f.name}" ${hidden} /> </label>`;
     }
 
     // Renderizado estándar con posible botón addon
     return `
-      <label>
+      <label style="${labelStyleExtra}">
         ${f.label}
         <div style="display:flex; align-items:center;">
             <input type="${type}" name="${f.name}" ${readOnly} ${hidden} style="flex:1;" />
@@ -110,11 +118,11 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <button id="${resource}-new-btn">+ Nueva Entrada</button>
       </div>
 
-      <div id="${modalId}" style="display:none; background: white; opacity: 1 !important; width: 70%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
-        <form id="${formId}">
+      <div id="${modalId}" style="display:none; background: white; opacity: 1 !important; height: auto; max-height: 600px; width: ${modalWidth}; margin: 5% auto; padding: 20px; border-radius: 8px; overflow-y: auto;">
+        <form id="${formId}" style="${formStyle}">
           ${fields.map(renderField).join("")}
-          <button type="submit">Guardar</button>
           <button type="button" id="${cancelId}">Cancelar</button>
+          <button type="submit">Guardar</button>
         </form>
       </div>
       
@@ -129,7 +137,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <thead>
           <tr>
             ${fields
-              .filter((f) => f.type !== "password")
+              .filter(
+                (f) =>
+                  f.type !== "password" &&
+                  f.name !== "fecha_registro" &&
+                  f.label !== "Fecha",
+              )
               .map((f) => `<th>${f.label}</th>`)
               .join("")}
             <th class="actions-header">Acciones</th>
@@ -406,7 +419,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           tr.dataset.id = item.id;
 
           const dataCells = fields
-            .filter((f) => f.type !== "password")
+            .filter(
+              (f) =>
+                f.type !== "password" &&
+                f.name !== "fecha_registro" &&
+                f.label !== "Fecha",
+            )
             .map((f) => {
               let val = item[f.name] ?? "";
               if (f.name.startsWith("id_") && relatedData[f.name]) {
@@ -709,6 +727,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       });
 
       const newBtn = document.getElementById(`${resource}-new-btn`);
+      newBtn.className = "create-button";
 
       if (newBtn) {
         newBtn.style.display = canCreate ? "inline-block" : "none";

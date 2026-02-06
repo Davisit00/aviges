@@ -377,23 +377,23 @@ def imprimir_ticket(ticket_id):
 
     # Construir el texto base por si el frontend lo necesita para impresoras térmicas (RAW)
     ticket_text = f"""
-    AVICOLA LA ROSITA, S.A.
-           MARA
+AVICOLA LA ROSITA, S.A.
+        MARA I
            
-    ASUNTO: {ticket.tipo_proceso.upper() or 'Entrada/Salida'} DE MERCANCIA
-    --------------------------------
-    TICKET #: {ticket.nro_ticket}
-    FECHA:    {fecha_str}
+ASUNTO: {ticket.tipo_proceso.upper() or 'Entrada/Salida'} DE MERCANCIA
+--------------------------
+TICKET #: {ticket.nro_ticket}
+FECHA:    {fecha_str}
     
-    PLACA ->  {placa}
-    CHOFER:   {nombre_chofer}
-    COD:      {nombre_producto}
-    --------------------------------
-    TARA:     {p_tara:,.2f} Kg
-    BRUTO:    {p_bruto:,.2f} Kg
-    HORA:     {hora_str}
-    --------------------------------
-    KILOS NETO -> {p_neto:,.2f} Kg
+PLACA:    {placa}
+CHOFER:   {nombre_chofer}
+PROD:     {nombre_producto}
+--------------------------
+TARA:     {p_tara:,.2f} Kg
+BRUTO:    {p_bruto:,.2f} Kg
+HORA:     {hora_str}
+--------------------------
+KILOS NETO -> {p_neto:,.2f} Kg
     """
     
     # LOGICA DE REGISTRO (Opcional):
@@ -401,22 +401,20 @@ def imprimir_ticket(ticket_id):
     # ticket.impreso = True
     # db.session.commit()
 
-    # Devolvemos los datos estructurados y el texto plano
+    # Devolvemos solo datos crudos, el frontend se encarga del formato
     return jsonify({
-        "message": "Datos listos para imprimir",
-        "ticket_text": ticket_text, # Útil para que el frontend lo mande directo a una impresora térmica
-        "ticket_data": {            # Útil para armar un PDF o HTML bonito
-            "numero": ticket.nro_ticket,
-            "empresa": "AVICOLA LA ROSITA, S.A.",
-            "fecha": fecha_str,
-            "hora": hora_str,
-            "placa": placa,
-            "chofer": nombre_chofer,
-            "producto": nombre_producto,
-            "tara": p_tara,
-            "bruto": p_bruto,
-            "neto": p_neto
-        }
+        "nro_ticket": ticket.nro_ticket,
+        "empresa": "AVICOLA LA ROSITA, S.A.",
+        "sucursal": "MARA I",
+        "tipo_proceso": ticket.tipo_proceso.upper() or 'ENTRADA/SALIDA',
+        "fecha": fecha_str,
+        "hora": hora_str,
+        "placa": placa,
+        "chofer": nombre_chofer,
+        "producto": nombre_producto,
+        "peso_tara": p_tara,
+        "peso_bruto": p_bruto,
+        "peso_neto": p_neto
     })
 
 @api_bp.route("/tickets_pesaje", methods=["POST"])
