@@ -13,7 +13,7 @@ function LoginHandler(event) {
   const username = document.getElementById("username").value;
   const password = document.getElementById("password").value;
   const payload = {
-    nombre_usuario: username,
+    usuario: username,
     contrasena: password,
   };
   login(payload)
