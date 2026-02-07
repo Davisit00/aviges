@@ -29,4 +29,7 @@ function LoginHandler(event) {
     });
 }
 
-document.getElementById("login-button").addEventListener("click", LoginHandler);
+// Wait for DOM to be ready before attaching event listeners
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("login-button").addEventListener("click", LoginHandler);
+});
