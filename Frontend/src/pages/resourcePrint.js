@@ -2,7 +2,17 @@ import { listResource, printTicket } from "../api.js";
 
 const getDisplayLabel = (item) => {
   if (!item) return "";
-  if (item.nombre_usuario) return item.nombre_usuario;
+  // Handle combined endpoint responses with persona data
+  if (item.persona) {
+    const persona = item.persona;
+    return `${persona.cedula || ""} - ${persona.nombre || ""} ${persona.apellido || ""}`.trim();
+  }
+  // Handle combined endpoint responses with ubicacion data
+  if (item.ubicacion) {
+    return item.ubicacion.nombre || item.id;
+  }
+  // Legacy and new field support
+  if (item.usuario) return item.usuario;
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;
@@ -26,22 +36,77 @@ export const createPrintPage = ({
   const searchId = `${resource}-print-search`;
 
   const handlePrintTicket = async (id) => {
-    try {
-      const data = await printTicket(id);
-      console.log("Print ticket response:", data);
+    // 1. Abrimos la ventana INMEDIATAMENTE (antes del await) para evitar bloqueo de popups
+    const win = window.open("", "PrintTicket", "width=400,height=600");
 
-      if (data && data.data && data.data.ticket_text) {
-        // Abrir una ventana emergente simple para imprimir el texto preformateado
-        const win = window.open("", "PrintTicket", "width=400,height=600");
+    if (!win) {
+      alert(
+        "El navegador bloqueó la ventana emergente. Por favor permítala para imprimir.",
+      );
+      return;
+    }
+
+    // Mensaje temporal
+    win.document.write("<h3>Generando vista previa...</h3>");
+
+    try {
+      const resp = await printTicket(id);
+      // Ajuste según estructura de respuesta. Si printTicket devuelve axios response completo:
+      const ticket = resp.data || resp;
+
+      if (ticket && ticket.nro_ticket) {
+        // Helper para formato numérico
+        const fmt = (n) =>
+          parseFloat(n || 0).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+
+        // Construir la estructura visual con HTML
+        // Usamos un layout de bloques estándar para evitar problemas de espaciado vertical
+        const ticketHtml = `
+        <div style="font-family: 'Courier New', monospace; font-size: 16px; width: 100%; max-width: 350px;">
+            <div style="text-align: center; font-weight: bold; font-size: 20px; margin-bottom: 4px;">${ticket.empresa}</div>
+            <div style="text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 8px;">${ticket.sucursal || ""}</div>
+           
+            <div style="text-align: center; margin-bottom: 5px; font-weight: bold;">ASUNTO: ${ticket.tipo_proceso} DE MERCANCIA</div>
+            
+            <div style="border-bottom: 1px dashed black; width: 100%; margin: 5px 0;"></div>
+            
+            <div style="font-weight: bold; margin: 5px 0;">TICKET #: ${ticket.nro_ticket}</div>
+            
+            <div>FECHA:    ${ticket.fecha}</div>
+            <div>PLACA:    ${ticket.placa}</div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">CHOFER:   ${ticket.chofer}</div>
+            <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">PROD:     ${ticket.producto}</div>
+            
+            <div style="border-bottom: 1px dashed black; width: 100%; margin: 5px 0;"></div>
+            
+            <div style="display: flex; justify-content: space-between;">
+                <span>TARA:</span> <span>${fmt(ticket.peso_tara)} Kg</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>BRUTO:</span> <span>${fmt(ticket.peso_bruto)} Kg</span>
+            </div>
+            <div>HORA:     ${ticket.hora}</div>
+            
+            <div style="border-bottom: 1px dashed black; width: 100%; margin: 5px 0;"></div>
+            
+            <div style="font-weight: bold; font-size: 15px; margin-top: 5px;">KILOS NETO -> ${fmt(ticket.peso_neto)} Kg</div>
+        </div>`;
+
+        // RELLENAMOS la ventana que ya teníamos abierta
+        win.document.open(); // Limpia el "Generando vista previa..."
         win.document.write(`
           <html>
             <head>
               <title>Imprimir Ticket</title>
               <style>
-                body { margin: 0; padding: 10px; font-family: monospace; white-space: pre-wrap; }
+                @page { margin: 0; }
+                body { margin: 0; padding: 10px 20px; font-family: monospace; }
               </style>
             </head>
-            <body>${data.data.ticket_text}</body>
+            <body>${ticketHtml}</body>
           </html>
         `);
         win.document.close();
@@ -53,9 +118,11 @@ export const createPrintPage = ({
           win.close();
         }, 500);
       } else {
+        win.close(); // Cerramos si no era válido
         alert("No se recibieron datos imprimibles.");
       }
     } catch (error) {
+      if (win) win.close(); // Cerramos si hubo error
       console.log("Something went wrong while printing the ticket:", error);
       alert("Error al intentar imprimir el ticket.");
     }

@@ -25,18 +25,22 @@ form {
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
+  width: 100%;
+  height: 100%;
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  margin-bottom: 16px;
+  justify-items: center;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 form label {
+  grid-column: 1 / -1; /* Hace que el elemento ocupe todas las columnas de la fila */
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 14px;
   color: var(--muted);
+  width: 100%; /* Cambiado de fit-content a 100% */
 }
 
 input,
@@ -65,16 +69,25 @@ form button[type="button"] {
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
+  width: fit-content;
+  height: fit-content;
+  transition: background-color 0.3s ease;
 }
 
 form button[type="submit"] {
   background: var(--primary);
   color: #fff;
 }
+form button[type="submit"]:hover {
+  background: #1e40af;
+}
 
 form button[type="button"] {
   background: #e5e7eb;
   color: #111827;
+}
+form button[type="button"]:hover {
+  background: #d1d5db;
 }
 
 table {
@@ -139,6 +152,7 @@ table button[data-action="delete"] {
 label {
   display: flex;
   flex-direction: column;
+  width: 100%; /* Cambiado de fit-content a 100% */
   gap: 6px;
   font-size: 14px;
   color: var(--muted);
