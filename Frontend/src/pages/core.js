@@ -35,26 +35,10 @@ const maintenanceDeployButton = document.getElementById(
 const processDeployButton = document.getElementById("process-deploy-button");
 const reportsDeployButton = document.getElementById("reports-deploy-button");
 
-const maintenanceMenuList = document.getElementById("maintenance-menu-list");
-const processMenuList = document.getElementById("process-menu-list");
-const reportsMenuList = document.getElementById("reports-menu-list");
-
-maintenanceDeployButton.addEventListener("click", () => {
-  maintenanceMenuList.classList.toggle("show-menu");
-});
-
-processDeployButton.addEventListener("click", () => {
-  processMenuList.classList.toggle("show-menu");
-});
-
-reportsDeployButton.addEventListener("click", () => {
-  reportsMenuList.classList.toggle("show-menu");
-});
-
 // Variable global para almacenar el rol del usuario
 let currentUserRole = null;
 
-// Lógica para inicializar permisos y rotar iconos
+// Lógica para inicializar permisos y menus desplegables
 window.addEventListener("DOMContentLoaded", async () => {
   // 1. Obtener información del usuario y Rol
   try {
@@ -74,25 +58,31 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Opcional: Redirigir si falla la autenticación crítica
   }
 
-  // Lógica para rotar el icono del menú
-  const btn1 = document.getElementById("maintenance-deploy-button");
-  if (btn1) {
-    btn1.addEventListener("click", () => {
-      const icon = btn1.querySelector(".arrow-icon");
+  // 2. Configurar event listeners para los menús desplegables
+  const maintenanceMenuList = document.getElementById("maintenance-menu-list");
+  const processMenuList = document.getElementById("process-menu-list");
+  const reportsMenuList = document.getElementById("reports-menu-list");
+
+  if (maintenanceDeployButton && maintenanceMenuList) {
+    maintenanceDeployButton.addEventListener("click", () => {
+      maintenanceMenuList.classList.toggle("show-menu");
+      const icon = maintenanceDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
     });
   }
-  const btn2 = document.getElementById("process-deploy-button");
-  if (btn2) {
-    btn2.addEventListener("click", () => {
-      const icon = btn2.querySelector(".arrow-icon");
+
+  if (processDeployButton && processMenuList) {
+    processDeployButton.addEventListener("click", () => {
+      processMenuList.classList.toggle("show-menu");
+      const icon = processDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
     });
   }
-  const btn3 = document.getElementById("reports-deploy-button");
-  if (btn3) {
-    btn3.addEventListener("click", () => {
-      const icon = btn3.querySelector(".arrow-icon");
+
+  if (reportsDeployButton && reportsMenuList) {
+    reportsDeployButton.addEventListener("click", () => {
+      reportsMenuList.classList.toggle("show-menu");
+      const icon = reportsDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
     });
   }
