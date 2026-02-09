@@ -6,6 +6,7 @@ import {
   getUserInfo,
   getWeighFromTruckScale,
 } from "../api.js";
+import { resourceConfigs } from "./resourceConfigs.js";
 
 // Helper to determine the resource URL based on the FK field name
 const getRelatedResourceName = (fieldName) => {
@@ -67,20 +68,33 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       return `
         <label>
           ${f.label}
-          <!-- Input visible para buscar -->
-          <input 
-            type="text" 
-            list="${listId}" 
-            id="search-${f.name}"
-            placeholder="Escriba para buscar o haga doble click..." 
-            ${readOnly ? "disabled" : ""} 
-            autocomplete="off"
-            style="width: 100%; box-sizing: border-box;"
-          >
-          <!-- Lista de opciones ocultas -->
-          <datalist id="${listId}"></datalist>
-          <!-- Input oculto que guarda el valor real (ID) -->
-          <input type="hidden" name="${f.name}">
+          <div style="display: flex; gap: 8px; align-items: flex-start;">
+            <div style="flex: 1;">
+              <!-- Input visible para buscar -->
+              <input 
+                type="text" 
+                list="${listId}" 
+                id="search-${f.name}"
+                placeholder="Escriba para buscar o haga doble click..." 
+                ${readOnly ? "disabled" : ""} 
+                autocomplete="off"
+                style="width: 100%; box-sizing: border-box;"
+              >
+              <!-- Lista de opciones ocultas -->
+              <datalist id="${listId}"></datalist>
+              <!-- Input oculto que guarda el valor real (ID) -->
+              <input type="hidden" name="${f.name}">
+            </div>
+            <button 
+              type="button" 
+              class="create-related-btn" 
+              data-field="${f.name}"
+              style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;"
+              ${readOnly ? "disabled" : ""}
+            >
+              + Nuevo
+            </button>
+          </div>
         </label>
       `;
     }
@@ -116,6 +130,19 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           <button type="submit">Guardar</button>
           <button type="button" id="${cancelId}">Cancelar</button>
         </form>
+      </div>
+
+      <!-- Nested Modal for Creating Related Entities -->
+      <div id="${resource}-nested-modal" style="display:none; background: white; opacity: 1 !important; width: 50%; margin: 10% auto; padding: 20px; border-radius: 8px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 10000001;">
+        <h3 id="${resource}-nested-title">Crear Nuevo</h3>
+        <div id="${resource}-nested-error" style="color: red; margin-bottom: 10px;"></div>
+        <form id="${resource}-nested-form">
+          <!-- Dynamic fields will be inserted here -->
+        </form>
+        <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" id="${resource}-nested-cancel" style="padding: 8px 16px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancelar</button>
+          <button type="button" id="${resource}-nested-save" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Guardar</button>
+        </div>
       </div>
       
       <div style="margin: 20px 0;">
@@ -192,6 +219,217 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         overlay.style.opacity = "1";
         overlay.style.zIndex = "10000000";
       }
+
+      // Setup nested modal for creating related entities
+      const nestedModal = document.getElementById(`${resource}-nested-modal`);
+      const nestedForm = document.getElementById(`${resource}-nested-form`);
+      const nestedTitle = document.getElementById(`${resource}-nested-title`);
+      const nestedError = document.getElementById(`${resource}-nested-error`);
+      const nestedCancelBtn = document.getElementById(`${resource}-nested-cancel`);
+      const nestedSaveBtn = document.getElementById(`${resource}-nested-save`);
+      let currentNestedField = null;
+      let currentNestedResource = null;
+
+      if (overlay && nestedModal && nestedModal.parentElement !== overlay) {
+        overlay.appendChild(nestedModal);
+      }
+
+      const showNestedModal = async (fieldName) => {
+        currentNestedField = fieldName;
+        currentNestedResource = getRelatedResourceName(fieldName);
+        
+        const config = resourceConfigs[currentNestedResource];
+        if (!config) {
+          alert(`No se puede crear ${currentNestedResource} - configuración no encontrada`);
+          return;
+        }
+
+        nestedTitle.textContent = `Crear ${config.title || currentNestedResource}`;
+        nestedError.textContent = "";
+        
+        // Show modal with loading state
+        nestedForm.innerHTML = '<p style="text-align: center; padding: 20px;">⏳ Cargando...</p>';
+        if (overlay) overlay.style.display = "flex";
+        nestedModal.style.display = "block";
+        
+        // Load related data for nested FK fields
+        const nestedRelatedData = {};
+        const nestedFkFields = config.fields.filter(f => f.name.startsWith("id_") && !f.readOnly);
+        
+        for (const fkField of nestedFkFields) {
+          const relatedResourceName = getRelatedResourceName(fkField.name);
+          try {
+            const res = await listResource(relatedResourceName, { page: 1, per_page: 1000 });
+            nestedRelatedData[fkField.name] = res.data.items || res.data || [];
+          } catch (err) {
+            console.error(`Error loading ${relatedResourceName}:`, err);
+            nestedRelatedData[fkField.name] = [];
+          }
+        }
+        
+        // Render form fields for the nested entity
+        nestedForm.innerHTML = config.fields
+          .filter(f => !f.readOnly && f.name !== "id" && !f.name.startsWith("fecha_"))
+          .map(f => {
+            const type = f.type || "text";
+            // Determine if field is required based on common patterns
+            const isRequired = f.name === "nombre" || f.name === "placa" || f.name === "cedula" || 
+                             f.name === "codigo" || f.name === "nombre_usuario" ||
+                             (f.name.startsWith("id_") && currentNestedResource === "galpones" && f.name === "id_granja");
+            
+            if (f.type === "checkbox") {
+              return `
+                <label style="display: block; margin-bottom: 10px;">
+                  <input type="checkbox" name="${f.name}" />
+                  ${f.label}
+                </label>
+              `;
+            }
+            // For nested FKs, render as dropdown with data
+            if (f.name.startsWith("id_")) {
+              const relatedItems = nestedRelatedData[f.name] || [];
+              const options = relatedItems.map(item => 
+                `<option value="${item.id}">${getDisplayLabel(item)}</option>`
+              ).join("");
+              
+              return `
+                <label style="display: block; margin-bottom: 10px;">
+                  ${f.label} ${isRequired ? '<span style="color: red;">*</span>' : ''}
+                  <select 
+                    name="${f.name}" 
+                    style="width: 100%; padding: 6px; box-sizing: border-box;"
+                    ${isRequired ? 'required' : ''}
+                  >
+                    <option value="">-- Seleccione --</option>
+                    ${options}
+                  </select>
+                  ${!isRequired ? '<small style="color: #666;">Opcional</small>' : ''}
+                </label>
+              `;
+            }
+            return `
+              <label style="display: block; margin-bottom: 10px;">
+                ${f.label} ${isRequired ? '<span style="color: red;">*</span>' : ''}
+                <input 
+                  type="${type}" 
+                  name="${f.name}" 
+                  style="width: 100%; padding: 6px; box-sizing: border-box;"
+                  ${isRequired ? 'required' : ''}
+                >
+              </label>
+            `;
+          })
+          .join("");
+      };
+
+      const hideNestedModal = () => {
+        nestedModal.style.display = "none";
+        nestedForm.innerHTML = "";
+        currentNestedField = null;
+        currentNestedResource = null;
+      };
+
+      // Handle "Create New" button clicks
+      form.addEventListener("click", (e) => {
+        const btn = e.target.closest(".create-related-btn");
+        if (!btn) return;
+        e.preventDefault();
+        const fieldName = btn.dataset.field;
+        showNestedModal(fieldName);
+      });
+
+      // Handle nested form save
+      nestedSaveBtn.addEventListener("click", async () => {
+        nestedError.textContent = "";
+        
+        // Validate required fields
+        const requiredInputs = nestedForm.querySelectorAll('[required]');
+        let hasErrors = false;
+        requiredInputs.forEach(input => {
+          if (!input.value || input.value.trim() === "") {
+            hasErrors = true;
+            input.style.borderColor = "red";
+          } else {
+            input.style.borderColor = "";
+          }
+        });
+        
+        if (hasErrors) {
+          nestedError.textContent = "Por favor complete todos los campos requeridos (*)";
+          return;
+        }
+        
+        const formData = new FormData(nestedForm);
+        const data = {};
+        const config = resourceConfigs[currentNestedResource];
+        
+        for (const [key, value] of formData.entries()) {
+          const fieldConfig = config.fields.find(f => f.name === key);
+          const inputElement = nestedForm.querySelector(`[name="${key}"]`);
+          
+          if (inputElement?.type === "checkbox") {
+            data[key] = inputElement.checked;
+          } else if (key.startsWith("id_")) {
+            // Parse as integer for ID fields
+            const numValue = parseInt(value, 10);
+            data[key] = !isNaN(numValue) ? numValue : undefined;
+          } else if (fieldConfig?.type === "number") {
+            // Parse as float for other numeric fields
+            const numValue = parseFloat(value);
+            data[key] = !isNaN(numValue) ? numValue : undefined;
+          } else {
+            data[key] = value;
+          }
+        }
+
+        // Remove undefined values and empty strings
+        Object.keys(data).forEach(key => {
+          if (data[key] === undefined || data[key] === "") {
+            delete data[key];
+          }
+        });
+
+        nestedSaveBtn.disabled = true;
+        nestedSaveBtn.textContent = "Guardando...";
+
+        try {
+          const res = await createResource(currentNestedResource, data);
+          const newItem = res.data;
+          
+          // Add to related data
+          if (!relatedData[currentNestedField]) {
+            relatedData[currentNestedField] = [];
+          }
+          relatedData[currentNestedField].push(newItem);
+
+          // Update the datalist
+          const dataList = document.getElementById(`list-${currentNestedField}`);
+          if (dataList) {
+            const opt = document.createElement("option");
+            opt.value = getDisplayLabel(newItem);
+            dataList.appendChild(opt);
+          }
+
+          // Set the newly created item as selected
+          const searchInput = document.getElementById(`search-${currentNestedField}`);
+          const hiddenInput = form.querySelector(`[name="${currentNestedField}"]`);
+          if (searchInput && hiddenInput) {
+            searchInput.value = getDisplayLabel(newItem);
+            hiddenInput.value = newItem.id;
+          }
+
+          alert(`${nestedTitle.textContent} creado exitosamente`);
+          hideNestedModal();
+          
+        } catch (err) {
+          nestedError.textContent = err?.response?.data?.error || err.message || "Error al crear";
+        } finally {
+          nestedSaveBtn.disabled = false;
+          nestedSaveBtn.textContent = "Guardar";
+        }
+      });
+
+      nestedCancelBtn.addEventListener("click", hideNestedModal);
 
       const openItem = (id, mode = "view") => {
         const item = currentItems.find((i) => i.id == id);
