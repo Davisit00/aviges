@@ -234,7 +234,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         overlay.appendChild(nestedModal);
       }
 
-      const showNestedModal = (fieldName) => {
+      const showNestedModal = async (fieldName) => {
         currentNestedField = fieldName;
         currentNestedResource = getRelatedResourceName(fieldName);
         
@@ -246,6 +246,21 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
         nestedTitle.textContent = `Crear ${config.title || currentNestedResource}`;
         nestedError.textContent = "";
+        
+        // Load related data for nested FK fields
+        const nestedRelatedData = {};
+        const nestedFkFields = config.fields.filter(f => f.name.startsWith("id_") && !f.readOnly);
+        
+        for (const fkField of nestedFkFields) {
+          const relatedResourceName = getRelatedResourceName(fkField.name);
+          try {
+            const res = await listResource(relatedResourceName, { page: 1, per_page: 1000 });
+            nestedRelatedData[fkField.name] = res.data.items || res.data || [];
+          } catch (err) {
+            console.error(`Error loading ${relatedResourceName}:`, err);
+            nestedRelatedData[fkField.name] = [];
+          }
+        }
         
         // Render form fields for the nested entity
         nestedForm.innerHTML = config.fields
@@ -260,18 +275,24 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
                 </label>
               `;
             }
-            // For nested FKs, we'll use simple text inputs for now (can enhance later)
+            // For nested FKs, render as dropdown with data
             if (f.name.startsWith("id_")) {
+              const relatedItems = nestedRelatedData[f.name] || [];
+              const options = relatedItems.map(item => 
+                `<option value="${item.id}">${getDisplayLabel(item)}</option>`
+              ).join("");
+              
               return `
                 <label style="display: block; margin-bottom: 10px;">
                   ${f.label}
-                  <input 
-                    type="text" 
+                  <select 
                     name="${f.name}" 
-                    placeholder="ID (opcional)" 
                     style="width: 100%; padding: 6px; box-sizing: border-box;"
                   >
-                  <small style="color: #666;">Deje vacío si no aplica</small>
+                    <option value="">-- Seleccione --</option>
+                    ${options}
+                  </select>
+                  <small style="color: #666;">Opcional si no aplica</small>
                 </label>
               `;
             }
