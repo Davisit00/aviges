@@ -6,6 +6,7 @@ import {
   getUserInfo,
   getWeighFromTruckScale,
 } from "../api.js";
+import { resourceConfigs } from "./resourceConfigs.js";
 
 // Helper to determine the resource URL based on the FK field name
 const getRelatedResourceName = (fieldName) => {
@@ -67,20 +68,33 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       return `
         <label>
           ${f.label}
-          <!-- Input visible para buscar -->
-          <input 
-            type="text" 
-            list="${listId}" 
-            id="search-${f.name}"
-            placeholder="Escriba para buscar o haga doble click..." 
-            ${readOnly ? "disabled" : ""} 
-            autocomplete="off"
-            style="width: 100%; box-sizing: border-box;"
-          >
-          <!-- Lista de opciones ocultas -->
-          <datalist id="${listId}"></datalist>
-          <!-- Input oculto que guarda el valor real (ID) -->
-          <input type="hidden" name="${f.name}">
+          <div style="display: flex; gap: 8px; align-items: flex-start;">
+            <div style="flex: 1;">
+              <!-- Input visible para buscar -->
+              <input 
+                type="text" 
+                list="${listId}" 
+                id="search-${f.name}"
+                placeholder="Escriba para buscar o haga doble click..." 
+                ${readOnly ? "disabled" : ""} 
+                autocomplete="off"
+                style="width: 100%; box-sizing: border-box;"
+              >
+              <!-- Lista de opciones ocultas -->
+              <datalist id="${listId}"></datalist>
+              <!-- Input oculto que guarda el valor real (ID) -->
+              <input type="hidden" name="${f.name}">
+            </div>
+            <button 
+              type="button" 
+              class="create-related-btn" 
+              data-field="${f.name}"
+              style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; white-space: nowrap;"
+              ${readOnly ? "disabled" : ""}
+            >
+              + Nuevo
+            </button>
+          </div>
         </label>
       `;
     }
@@ -116,6 +130,19 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           <button type="submit">Guardar</button>
           <button type="button" id="${cancelId}">Cancelar</button>
         </form>
+      </div>
+
+      <!-- Nested Modal for Creating Related Entities -->
+      <div id="${resource}-nested-modal" style="display:none; background: white; opacity: 1 !important; width: 50%; margin: 10% auto; padding: 20px; border-radius: 8px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 10000001;">
+        <h3 id="${resource}-nested-title">Crear Nuevo</h3>
+        <div id="${resource}-nested-error" style="color: red; margin-bottom: 10px;"></div>
+        <form id="${resource}-nested-form">
+          <!-- Dynamic fields will be inserted here -->
+        </form>
+        <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" id="${resource}-nested-cancel" style="padding: 8px 16px; background: #999; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancelar</button>
+          <button type="button" id="${resource}-nested-save" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Guardar</button>
+        </div>
       </div>
       
       <div style="margin: 20px 0;">
@@ -192,6 +219,160 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         overlay.style.opacity = "1";
         overlay.style.zIndex = "10000000";
       }
+
+      // Setup nested modal for creating related entities
+      const nestedModal = document.getElementById(`${resource}-nested-modal`);
+      const nestedForm = document.getElementById(`${resource}-nested-form`);
+      const nestedTitle = document.getElementById(`${resource}-nested-title`);
+      const nestedError = document.getElementById(`${resource}-nested-error`);
+      const nestedCancelBtn = document.getElementById(`${resource}-nested-cancel`);
+      const nestedSaveBtn = document.getElementById(`${resource}-nested-save`);
+      let currentNestedField = null;
+      let currentNestedResource = null;
+
+      if (overlay && nestedModal && nestedModal.parentElement !== overlay) {
+        overlay.appendChild(nestedModal);
+      }
+
+      const showNestedModal = (fieldName) => {
+        currentNestedField = fieldName;
+        currentNestedResource = getRelatedResourceName(fieldName);
+        
+        const config = resourceConfigs[currentNestedResource];
+        if (!config) {
+          alert(`No se puede crear ${currentNestedResource} - configuración no encontrada`);
+          return;
+        }
+
+        nestedTitle.textContent = `Crear ${config.title || currentNestedResource}`;
+        nestedError.textContent = "";
+        
+        // Render form fields for the nested entity
+        nestedForm.innerHTML = config.fields
+          .filter(f => !f.readOnly && f.name !== "id" && !f.name.startsWith("fecha_"))
+          .map(f => {
+            const type = f.type || "text";
+            if (f.type === "checkbox") {
+              return `
+                <label style="display: block; margin-bottom: 10px;">
+                  <input type="checkbox" name="${f.name}" />
+                  ${f.label}
+                </label>
+              `;
+            }
+            // For nested FKs, we'll use simple text inputs for now (can enhance later)
+            if (f.name.startsWith("id_")) {
+              return `
+                <label style="display: block; margin-bottom: 10px;">
+                  ${f.label}
+                  <input 
+                    type="text" 
+                    name="${f.name}" 
+                    placeholder="ID (opcional)" 
+                    style="width: 100%; padding: 6px; box-sizing: border-box;"
+                  >
+                  <small style="color: #666;">Deje vacío si no aplica</small>
+                </label>
+              `;
+            }
+            return `
+              <label style="display: block; margin-bottom: 10px;">
+                ${f.label}
+                <input 
+                  type="${type}" 
+                  name="${f.name}" 
+                  style="width: 100%; padding: 6px; box-sizing: border-box;"
+                  ${f.name === "nombre" || f.name === "placa" || f.name === "cedula" ? "required" : ""}
+                >
+              </label>
+            `;
+          })
+          .join("");
+
+        if (overlay) overlay.style.display = "flex";
+        nestedModal.style.display = "block";
+      };
+
+      const hideNestedModal = () => {
+        nestedModal.style.display = "none";
+        nestedForm.innerHTML = "";
+        currentNestedField = null;
+        currentNestedResource = null;
+      };
+
+      // Handle "Create New" button clicks
+      form.addEventListener("click", (e) => {
+        const btn = e.target.closest(".create-related-btn");
+        if (!btn) return;
+        e.preventDefault();
+        const fieldName = btn.dataset.field;
+        showNestedModal(fieldName);
+      });
+
+      // Handle nested form save
+      nestedSaveBtn.addEventListener("click", async () => {
+        nestedError.textContent = "";
+        const formData = new FormData(nestedForm);
+        const data = {};
+        
+        for (const [key, value] of formData.entries()) {
+          if (key.startsWith("id_") || key === "capacidad" || key === "peso_tara") {
+            data[key] = value ? parseFloat(value) : undefined;
+          } else if (nestedForm.querySelector(`[name="${key}"]`).type === "checkbox") {
+            data[key] = nestedForm.querySelector(`[name="${key}"]`).checked;
+          } else {
+            data[key] = value;
+          }
+        }
+
+        // Remove undefined values
+        Object.keys(data).forEach(key => {
+          if (data[key] === undefined || data[key] === "") {
+            delete data[key];
+          }
+        });
+
+        nestedSaveBtn.disabled = true;
+        nestedSaveBtn.textContent = "Guardando...";
+
+        try {
+          const res = await createResource(currentNestedResource, data);
+          const newItem = res.data;
+          
+          // Add to related data
+          if (!relatedData[currentNestedField]) {
+            relatedData[currentNestedField] = [];
+          }
+          relatedData[currentNestedField].push(newItem);
+
+          // Update the datalist
+          const dataList = document.getElementById(`list-${currentNestedField}`);
+          if (dataList) {
+            const opt = document.createElement("option");
+            opt.value = getDisplayLabel(newItem);
+            dataList.appendChild(opt);
+          }
+
+          // Set the newly created item as selected
+          const searchInput = document.getElementById(`search-${currentNestedField}`);
+          const hiddenInput = form.querySelector(`[name="${currentNestedField}"]`);
+          if (searchInput && hiddenInput) {
+            searchInput.value = getDisplayLabel(newItem);
+            hiddenInput.value = newItem.id;
+          }
+
+          alert(`${nestedTitle.textContent} creado exitosamente`);
+          hideNestedModal();
+          
+        } catch (err) {
+          nestedError.textContent = err?.response?.data?.error || err.message || "Error al crear";
+        } finally {
+          nestedSaveBtn.disabled = false;
+          nestedSaveBtn.textContent = "Guardar";
+        }
+      });
+
+      nestedCancelBtn.addEventListener("click", hideNestedModal);
 
       const openItem = (id, mode = "view") => {
         const item = currentItems.find((i) => i.id == id);
