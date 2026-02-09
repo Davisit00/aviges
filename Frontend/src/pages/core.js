@@ -7,102 +7,13 @@ import { GalponesInterface } from "./galpones.js";
 import { VehiculosInterface } from "./vehiculos.js";
 import { ChoferesInterface } from "./choferes.js";
 import { TicketsPesajeInterface } from "./ticketsPesaje.js";
-import { DetallesTransporteAvesInterface } from "./detallesTransporteAves.js";
 import { TicketsPesajePrintInterface } from "./ticketsPesajePrint.js";
 import { TicketsPesajeCrudInterface } from "./ticketsPesajeCrud.js";
-
-const productsButton = document.getElementById("products-button");
-const vehiclesButton = document.getElementById("vehicles-button");
-const driversButton = document.getElementById("drivers-button");
-const transportCompaniesButton = document.getElementById(
-  "transport-companies-button",
-);
-const farmsButton = document.getElementById("farms-button");
-const barnsButton = document.getElementById("barns-button");
-const usersButton = document.getElementById("users-button");
-const ticketsButton = document.getElementById("tickets-button");
-const avesDetailsButton = document.getElementById("aves-details-button");
-const logoutButton = document.getElementById("logout-button");
-const weighButton = document.getElementById("weigh-button");
-const ticketPrintButton = document.getElementById("ticket-print-button");
-const relacionPesajeButton = document.getElementById(
-  "weigh-relationship-button",
-);
-// INICIO FUNCIONALIDAD MENUS DESPLEGABLES
-const maintenanceDeployButton = document.getElementById(
-  "maintenance-deploy-button",
-);
-const processDeployButton = document.getElementById("process-deploy-button");
-const reportsDeployButton = document.getElementById("reports-deploy-button");
-
-const maintenanceMenuList = document.getElementById("maintenance-menu-list");
-const processMenuList = document.getElementById("process-menu-list");
-const reportsMenuList = document.getElementById("reports-menu-list");
-
-maintenanceDeployButton.addEventListener("click", () => {
-  maintenanceMenuList.classList.toggle("show-menu");
-});
-
-processDeployButton.addEventListener("click", () => {
-  processMenuList.classList.toggle("show-menu");
-});
-
-reportsDeployButton.addEventListener("click", () => {
-  reportsMenuList.classList.toggle("show-menu");
-});
+// IMPORTANTE: Importar la nueva interfaz
+import { WelcomeInterface } from "./welcome.js";
 
 // Variable global para almacenar el rol del usuario
 let currentUserRole = null;
-
-// Lógica para inicializar permisos y rotar iconos
-window.addEventListener("DOMContentLoaded", async () => {
-  // 1. Obtener información del usuario y Rol
-  try {
-    const res = await getUserInfo();
-    const user = res.data;
-    currentUserRole = user.id_rol;
-
-    // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
-    if (currentUserRole !== 1) {
-      if (usersButton) {
-        // Ocultamos el elemento <li> padre para que desaparezca de la lista
-        usersButton.parentElement.style.display = "none";
-      }
-    }
-  } catch (error) {
-    console.error("Error obteniendo info del usuario", error);
-    // Opcional: Redirigir si falla la autenticación crítica
-  }
-
-  // Lógica para rotar el icono del menú
-  const btn1 = document.getElementById("maintenance-deploy-button");
-  if (btn1) {
-    btn1.addEventListener("click", () => {
-      const icon = btn1.querySelector(".arrow-icon");
-      if (icon) icon.classList.toggle("rotated");
-    });
-  }
-  const btn2 = document.getElementById("process-deploy-button");
-  if (btn2) {
-    btn2.addEventListener("click", () => {
-      const icon = btn2.querySelector(".arrow-icon");
-      if (icon) icon.classList.toggle("rotated");
-    });
-  }
-  const btn3 = document.getElementById("reports-deploy-button");
-  if (btn3) {
-    btn3.addEventListener("click", () => {
-      const icon = btn3.querySelector(".arrow-icon");
-      if (icon) icon.classList.toggle("rotated");
-    });
-  }
-});
-// FIN FUNCIONALIDAD MENUS DESPLEGABLES
-
-function render(template, node) {
-  if (!node) return;
-  node.innerHTML = template;
-}
 
 // Helper para determinar si es solo lectura (Rol != 1)
 // Mantenimiento es ReadOnly para no admins.
@@ -136,80 +47,235 @@ const getPermissions = (moduleType) => {
   return { canCreate: false, canEdit: false, canDelete: false, readOnly: true };
 };
 
-productsButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(ProductsInterface.template, app);
-  ProductsInterface.setup(getPermissions("maintenance"));
-});
+function render(template, node) {
+  if (!node) return;
+  node.innerHTML = template;
+}
 
-vehiclesButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(VehiculosInterface.template, app);
-  VehiculosInterface.setup(getPermissions("maintenance"));
-});
+// Lógica para inicializar permisos y rotar iconos
+window.addEventListener("DOMContentLoaded", async () => {
+  // Get references to all buttons
+  const productsButton = document.getElementById("products-button");
+  const vehiclesButton = document.getElementById("vehicles-button");
+  const driversButton = document.getElementById("drivers-button");
+  const transportCompaniesButton = document.getElementById(
+    "transport-companies-button",
+  );
+  const farmsButton = document.getElementById("farms-button");
+  const barnsButton = document.getElementById("barns-button");
+  const usersButton = document.getElementById("users-button");
+  const ticketsButton = document.getElementById("tickets-button");
+  const avesDetailsButton = document.getElementById("aves-details-button");
+  const logoutButton = document.getElementById("logout-button");
+  const weighButton = document.getElementById("weigh-button");
+  const ticketPrintButton = document.getElementById("ticket-print-button");
+  const relacionPesajeButton = document.getElementById(
+    "weigh-relationship-button",
+  );
 
-driversButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(ChoferesInterface.template, app);
-  ChoferesInterface.setup(getPermissions("maintenance"));
-});
+  // NEW: Renderizar página de Bienvenida por defecto
+  const appContainer = document.getElementById("content-container");
+  if (appContainer) {
+    render(WelcomeInterface.template, appContainer);
+    WelcomeInterface.setup();
+  }
 
-transportCompaniesButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(EmpresasTransporteInterface.template, app);
-  EmpresasTransporteInterface.setup(getPermissions("maintenance"));
-});
+  // NEW: Toggle Menu Button Logic
+  const toggleMenuButton = document.getElementById("toggle-menu-button");
+  const mainMenu = document.querySelector(".main-menu");
+  const contentContainer = document.getElementById("content-container");
 
-farmsButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(GranjasInterface.template, app);
-  GranjasInterface.setup(getPermissions("maintenance"));
-});
+  if (toggleMenuButton) {
+    toggleMenuButton.addEventListener("click", () => {
+      mainMenu.classList.toggle("collapsed");
 
-barnsButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(GalponesInterface.template, app);
-  GalponesInterface.setup(getPermissions("maintenance"));
-});
+      // Referencias a elementos que cambian de visibilidad
+      const logoImage = document.getElementById("logo-image");
+      const subMenus = document.querySelectorAll(".lists-container ul");
 
-usersButton.addEventListener("click", () => {
-  // Doble seguridad: si no es admin, no renderiza nada
-  if (currentUserRole !== 1) return;
+      if (mainMenu.classList.contains("collapsed")) {
+        // MODO COLAPSADO
 
-  const app = document.getElementById("content-container");
-  render(UsuariosInterface.template, app);
-  // Usuarios siempre full permissions porque solo entra admin
-  UsuariosInterface.setup({ canCreate: true, canEdit: true, canDelete: true });
-});
+        // Ocultar texto, flechas, título y logo
+        mainMenu
+          .querySelectorAll(".menu-text, .arrow-icon, h2")
+          .forEach((el) => (el.style.display = "none"));
+        if (logoImage) logoImage.style.display = "none";
 
-weighButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(TicketsPesajeInterface.template, app);
-  // Tickets usa permisos de 'process'
-  TicketsPesajeInterface.setup(getPermissions("process"));
-});
+        // Cerrar submenús abiertos para evitar desbordamiento visual
+        subMenus.forEach((ul) => ul.classList.remove("show-menu"));
+        mainMenu
+          .querySelectorAll(".arrow-icon.rotated")
+          .forEach((icon) => icon.classList.remove("rotated"));
 
-avesDetailsButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(DetallesTransporteAvesInterface.template, app);
-  // Detalles Aves usa permisos de 'process'
-  DetallesTransporteAvesInterface.setup(getPermissions("process"));
-});
+        // Mostrar iconos colapsados
+        mainMenu
+          .querySelectorAll(".collapsed-icon")
+          .forEach((el) => (el.style.display = "block"));
+      } else {
+        // MODO EXPANDIDO
+        mainMenu.style.width = ""; // Reset to CSS default
 
-logoutButton.addEventListener("click", () => {
-  logout();
-  window.location.href = "../../index.html";
-  alert("Has cerrado sesión.");
-});
+        // Mostrar texto, flechas, título y logo
+        mainMenu
+          .querySelectorAll(".menu-text, .arrow-icon, h2")
+          .forEach((el) => (el.style.display = ""));
+        if (logoImage) logoImage.style.display = "";
 
-ticketPrintButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(TicketsPesajePrintInterface.template, app);
-  TicketsPesajePrintInterface.setup();
-});
+        // Ocultar iconos colapsados
+        mainMenu
+          .querySelectorAll(".collapsed-icon")
+          .forEach((el) => (el.style.display = "none"));
+      }
+    });
+  }
 
-ticketsButton.addEventListener("click", () => {
-  const app = document.getElementById("content-container");
-  render(TicketsPesajeCrudInterface.template, app);
-  TicketsPesajeCrudInterface.setup(getPermissions("process"));
+  // INICIO FUNCIONALIDAD MENUS DESPLEGABLES
+  // Get references to deploy buttons and menus
+  const maintenanceDeployButton = document.getElementById(
+    "maintenance-deploy-button",
+  );
+  const processDeployButton = document.getElementById("process-deploy-button");
+  const reportsDeployButton = document.getElementById("reports-deploy-button");
+
+  const maintenanceMenuList = document.getElementById("maintenance-menu-list");
+  const processMenuList = document.getElementById("process-menu-list");
+  const reportsMenuList = document.getElementById("reports-menu-list");
+
+  // Add event listeners for menu toggling and icon rotation
+  // Configuro esto ANTES de la llamada a la API para que el menú funcione visualmente de inmediato
+  if (maintenanceDeployButton) {
+    maintenanceDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        // Trigger click to expand
+        toggleMenuButton.click();
+      }
+
+      maintenanceMenuList.classList.toggle("show-menu");
+      const icon = maintenanceDeployButton.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+
+  if (processDeployButton) {
+    processDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        toggleMenuButton.click();
+      }
+
+      processMenuList.classList.toggle("show-menu");
+      const icon = processDeployButton.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+
+  if (reportsDeployButton) {
+    reportsDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        toggleMenuButton.click();
+      }
+
+      reportsMenuList.classList.toggle("show-menu");
+      const icon = reportsDeployButton.querySelector(".arrow-icon");
+      if (icon) icon.classList.toggle("rotated");
+    });
+  }
+  // FIN FUNCIONALIDAD MENUS DESPLEGABLES
+
+  // Add event listeners for all menu buttons
+  productsButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(ProductsInterface.template, app);
+    ProductsInterface.setup(getPermissions("maintenance"));
+  });
+
+  vehiclesButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(VehiculosInterface.template, app);
+    VehiculosInterface.setup(getPermissions("maintenance"));
+  });
+
+  driversButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(ChoferesInterface.template, app);
+    ChoferesInterface.setup(getPermissions("maintenance"));
+  });
+
+  transportCompaniesButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(EmpresasTransporteInterface.template, app);
+    EmpresasTransporteInterface.setup(getPermissions("maintenance"));
+  });
+
+  farmsButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(GranjasInterface.template, app);
+    GranjasInterface.setup(getPermissions("maintenance"));
+  });
+
+  barnsButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(GalponesInterface.template, app);
+    GalponesInterface.setup(getPermissions("maintenance"));
+  });
+
+  usersButton.addEventListener("click", () => {
+    // Doble seguridad: si no es admin, no renderiza nada
+    if (currentUserRole !== 1) return;
+
+    const app = document.getElementById("content-container");
+    render(UsuariosInterface.template, app);
+    // Usuarios siempre full permissions porque solo entra admin
+    UsuariosInterface.setup({
+      canCreate: true,
+      canEdit: true,
+      canDelete: true,
+    });
+  });
+
+  weighButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(TicketsPesajeInterface.template, app);
+    // Tickets usa permisos de 'process'
+    TicketsPesajeInterface.setup(getPermissions("process"));
+  });
+
+  logoutButton.addEventListener("click", () => {
+    logout();
+    window.location.href = "../../index.html";
+    alert("Has cerrado sesión.");
+  });
+
+  ticketPrintButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(TicketsPesajePrintInterface.template, app);
+    TicketsPesajePrintInterface.setup();
+  });
+
+  ticketsButton.addEventListener("click", () => {
+    const app = document.getElementById("content-container");
+    render(TicketsPesajeCrudInterface.template, app);
+    TicketsPesajeCrudInterface.setup(getPermissions("process"));
+  });
+
+  // 1. Obtener información del usuario y Rol
+  try {
+    const res = await getUserInfo();
+    const user = res.data;
+    currentUserRole = user.id_roles || user.user_rol;
+
+    // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
+    if (currentUserRole !== 1) {
+      if (usersButton) {
+        // Ocultamos el elemento <li> padre para que desaparezca de la lista
+        usersButton.parentElement.style.display = "none";
+      }
+    }
+  } catch (error) {
+    console.error("Error obteniendo info del usuario", error);
+    // Opcional: Redirigir si falla la autenticación crítica
+  }
 });

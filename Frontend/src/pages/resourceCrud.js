@@ -13,14 +13,27 @@ const getRelatedResourceName = (fieldName) => {
   const singular = fieldName.replace("id_", "");
   const map = {
     granja: "granjas",
-    empresa_transporte: "empresas_transporte",
+    empresas_transportes: "empresas_transporte",
     galpon: "galpones",
+    galpones: "galpones",
     ticket_pesaje: "tickets_pesaje",
-    usuario: "usuarios",
+    ticket: "tickets_pesaje",
+    usuarios_primer_peso: "combined/usuarios",
+    usuarios_segundo_peso: "combined/usuarios",
+    usuario: "combined/usuarios",
     producto: "productos",
     vehiculo: "vehiculos",
-    chofer: "choferes",
+    vehiculos: "vehiculos",
+    chofer: "combined/choferes",
+    choferes: "combined/choferes",
+    roles: "roles",
     rol: "roles",
+    personas: "personas",
+    asignaciones: "asignaciones",
+    ubicaciones: "ubicaciones",
+    origen: "ubicaciones",
+    destino: "ubicaciones",
+    lote: "lotes",
   };
   return map[singular] || singular + "s";
 };
@@ -28,7 +41,17 @@ const getRelatedResourceName = (fieldName) => {
 // Helper to determine what text to show in the dropdown/table
 const getDisplayLabel = (item) => {
   if (!item) return "";
-  if (item.nombre_usuario) return item.nombre_usuario;
+  // Handle combined endpoint responses with persona data
+  if (item.persona) {
+    const persona = item.persona;
+    return `${persona.cedula || ""} - ${persona.nombre || ""} ${persona.apellido || ""}`.trim();
+  }
+  // Handle combined endpoint responses with ubicacion data
+  if (item.ubicacion) {
+    return item.ubicacion.nombre || item.id;
+  }
+  // Legacy field support
+  if (item.usuario) return item.usuario;
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;
@@ -48,6 +71,13 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
   const searchId = `${resource}-search`;
   const modalId = `${resource}-modal`;
 
+  // Configuración específica para formularios densos
+  const isComplexForm = resource === "detalles_transporte_aves";
+  const modalWidth = isComplexForm ? "800px" : "500px";
+  const formStyle = isComplexForm ? "grid-template-columns: 1fr 1fr;" : "";
+  // Si es complejo, reseteamos el span para que quepan 2 en una fila. Si no, dejamos que el CSS global aplique (full width)
+  const labelStyleExtra = isComplexForm ? "grid-column: span 1;" : "";
+
   const renderField = (f) => {
     const type = f.type || "text";
     const readOnly = f.readOnly ? "readonly" : "";
@@ -62,11 +92,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             </button>
         `;
     }
+    if (f.name === "created_at" || f.name.endsWith(".created_at") || f.label === "Fecha") return "";
 
     if (f.name.startsWith("id_") && !f.hidden) {
       const listId = `list-${f.name}`;
       return `
-        <label>
+        <label style="${labelStyleExtra}">
           ${f.label}
           <div style="display: flex; gap: 8px; align-items: flex-start;">
             <div style="flex: 1;">
@@ -100,12 +131,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     }
 
     if (type === "checkbox") {
-      return `<label><input type="checkbox" name="${f.name}" ${hidden} /> ${f.label}</label>`;
+      return `<label style="display: flex; flex-direction: row; align-items: center; gap: 5px; ${labelStyleExtra}">${f.label} <input type="checkbox" name="${f.name}" ${hidden} /> </label>`;
     }
 
     // Renderizado estándar con posible botón addon
     return `
-      <label>
+      <label style="${labelStyleExtra}">
         ${f.label}
         <div style="display:flex; align-items:center;">
             <input type="${type}" name="${f.name}" ${readOnly} ${hidden} style="flex:1;" />
@@ -124,11 +155,11 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <button id="${resource}-new-btn">+ Nueva Entrada</button>
       </div>
 
-      <div id="${modalId}" style="display:none; background: white; opacity: 1 !important; width: 70%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
-        <form id="${formId}">
+      <div id="${modalId}" style="display:none; background: white; opacity: 1 !important; height: auto; max-height: 600px; width: ${modalWidth}; margin: 5% auto; padding: 20px; border-radius: 8px; overflow-y: auto;">
+        <form id="${formId}" style="${formStyle}">
           ${fields.map(renderField).join("")}
-          <button type="submit">Guardar</button>
           <button type="button" id="${cancelId}">Cancelar</button>
+          <button type="submit">Guardar</button>
         </form>
       </div>
 
@@ -156,7 +187,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <thead>
           <tr>
             ${fields
-              .filter((f) => f.type !== "password")
+              .filter(
+                (f) =>
+                  f.type !== "password" &&
+                  f.name !== "fecha_registro" &&
+                  f.label !== "Fecha",
+              )
               .map((f) => `<th>${f.label}</th>`)
               .join("")}
             <th class="actions-header">Acciones</th>
@@ -644,7 +680,12 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           tr.dataset.id = item.id;
 
           const dataCells = fields
-            .filter((f) => f.type !== "password")
+            .filter(
+              (f) =>
+                f.type !== "password" &&
+                f.name !== "fecha_registro" &&
+                f.label !== "Fecha",
+            )
             .map((f) => {
               let val = item[f.name] ?? "";
               if (f.name.startsWith("id_") && relatedData[f.name]) {
@@ -778,6 +819,32 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         const data = {};
         fields.forEach((f) => {
           if (f.name === "id") return;
+          
+          // Handle nested fields (e.g., "persona.nombre" -> data.persona = {nombre: value})
+          if (f.name.includes(".")) {
+            const parts = f.name.split(".");
+            const el = form.querySelector(`[name="${f.name}"]`);
+            if (!el) return;
+            
+            let current = data;
+            for (let i = 0; i < parts.length - 1; i++) {
+              if (!current[parts[i]]) current[parts[i]] = {};
+              current = current[parts[i]];
+            }
+            
+            const lastPart = parts[parts.length - 1];
+            if (f.type === "checkbox") {
+              current[lastPart] = !!el.checked;
+            } else {
+              if ((lastPart.startsWith("id_") || f.type === "number") && el.value !== "") {
+                current[lastPart] = parseFloat(el.value);
+              } else {
+                current[lastPart] = el.value;
+              }
+            }
+            return;
+          }
+          
           const el = form.querySelector(`[name="${f.name}"]`);
           if (!el) return;
 
@@ -804,6 +871,29 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
       const setFormData = (item) => {
         fields.forEach((f) => {
+          // Handle nested fields (e.g., "persona.nombre")
+          if (f.name.includes(".")) {
+            const el = form.querySelector(`[name="${f.name}"]`);
+            if (!el) return;
+            
+            // Navigate through the nested object
+            const parts = f.name.split(".");
+            let val = item;
+            for (const part of parts) {
+              val = val?.[part];
+              if (val === undefined) break;
+            }
+            
+            if (f.type === "password") {
+              el.value = "";
+            } else if (f.type === "checkbox") {
+              el.checked = !!val;
+            } else {
+              el.value = val ?? (f.defaultValue || "");
+            }
+            return;
+          }
+          
           const el = form.querySelector(`[name="${f.name}"]`);
 
           if (f.name.startsWith("id_")) {
@@ -947,6 +1037,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       });
 
       const newBtn = document.getElementById(`${resource}-new-btn`);
+      newBtn.className = "create-button";
 
       if (newBtn) {
         newBtn.style.display = canCreate ? "inline-block" : "none";

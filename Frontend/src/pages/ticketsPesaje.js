@@ -290,7 +290,7 @@ export const TicketsPesajeInterface = {
                 <td>${producto}</td>
                 <td>${chofer}</td>
                 <td>${pesoInicial}</td>
-                <td>${new Date(ticket.fecha_registro).toLocaleString()}</td>
+                <td>${new Date(ticket.created_at || ticket.fecha_registro).toLocaleString()}</td>
                 <td><span style="background:orange; padding:2px 5px; border-radius:4px;">${ticket.estado}</span></td>
             `;
         tr.style.cursor = "pointer";
