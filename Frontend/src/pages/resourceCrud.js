@@ -49,6 +49,7 @@ const getDisplayLabel = (item) => {
   }
 
   // Fallbacks genéricos
+  if (item.numero && item.tipo) return `${item.tipo}: ${item.numero}`; // <--- NUEVO PARA TELEFONOS
   if (item.cedula)
     return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
   if (item.nombre && item.apellido) return `${item.nombre} ${item.apellido}`;

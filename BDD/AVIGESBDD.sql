@@ -32,7 +32,7 @@ GO
 
 CREATE TABLE [Telefonos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
-  [id_personas] integer NOT NULL,
+  [id_personas] integer NULL,
   [numero] varchar(20) NOT NULL,
   [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Celular', 'Casa', 'Trabajo')),
   [is_deleted] bit NOT NULL DEFAULT (0),

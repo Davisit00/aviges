@@ -27,13 +27,13 @@ class Personas(db.Model):
 class Telefonos(db.Model):
     __tablename__ = "Telefonos"
     id = db.Column(db.Integer, primary_key=True)
-    id_personas = db.Column(db.Integer, db.ForeignKey("Personas.id"), nullable=False)
+    id_personas = db.Column(db.Integer, db.ForeignKey("Personas.id"), nullable=True) # SE CAMBIÓ A TRUE
     numero = db.Column(db.String(20), nullable=False)
-    estado = db.Column(db.String(255), nullable=False)
+    tipo = db.Column(db.String(255), nullable=False)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
     __table_args__ = (
-        CheckConstraint("estado IN ('Celular', 'Casa', 'Trabajo')", name='ck_telefonos_estado'),
+        CheckConstraint("tipo IN ('Celular', 'Casa', 'Trabajo')", name='ck_telefonos_tipo'),
     )
 
 class Roles(db.Model):

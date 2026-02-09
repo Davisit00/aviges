@@ -19,13 +19,22 @@ export const resourceConfigs = {
       { name: "nombre", label: "Nombre", required: true },
       { name: "apellido", label: "Apellido", required: true },
       { name: "id_direcciones", label: "Dirección", required: true },
-      // NUEVOS CAMPOS
-      { name: "telefono_numero", label: "Nro Teléfono", required: false },
+      // CAMBIO: Usar estilo FK para crear teléfono
+      { name: "id_telefono", label: "Teléfono Principal", required: false },
+    ],
+  },
+  // NUEVO RECURSO PARA EL MODAL
+  telefonos: {
+    title: "Crear Teléfono",
+    resource: "telefonos",
+    fields: [
+      { name: "numero", label: "Número Telefónico", required: true },
       {
-        name: "telefono_tipo",
-        label: "Tipo Teléfono",
+        name: "tipo",
+        label: "Tipo",
         type: "select",
-        enumKey: "telefonos_estado",
+        enumKey: "telefonos_tipo",
+        required: true,
       },
     ],
   },

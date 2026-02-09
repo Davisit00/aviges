@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
-from sqlalchemy.exc import IntegrityError # <--- AGREGAR ESTO
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError # <--- MODIFICADO: Agregar SQLAlchemyError
 import serial
 import serial.tools.list_ports 
 import datetime # Agregado para formatear fechas
@@ -58,7 +58,7 @@ def get_enums():
     Útil para llenar select/dropdowns en el Frontend.
     """
     return jsonify({
-        "telefonos_estado": ['Celular', 'Casa', 'Trabajo'],
+        "telefonos_tipo": ['Celular', 'Casa', 'Trabajo'],
         "ubicaciones_tipo": ['Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen'],
         "tickets_tipo": ['Entrada', 'Salida'],
         "tickets_estado": ['En proceso', 'Finalizado', 'Anulado']
@@ -589,13 +589,14 @@ def create_resource(resource):
     if resource == "usuarios" and "contrasena" in data:
         data["contraseña"] = generate_password_hash(data.pop("contrasena"))
 
-    # CAMBIO: Manejo especial para Personas (extraer teléfonos si vienen planos)
-    temp_telefono = None
+    # CAMBIO: Manejo especial para Personas (vincular teléfono creado previamente via FK UI)
+    temp_telefono_id = None
     if resource == "personas":
-        t_num = data.pop("telefono_numero", None)
-        t_tipo = data.pop("telefono_tipo", None)
-        if t_num and t_tipo:
-            temp_telefono = {"numero": t_num, "estado": t_tipo}
+        # Extraemos el ID del teléfono si viene seleccionado
+        temp_telefono_id = data.pop("id_telefono", None)
+        # Limpiamos campos planos antiguos si existieran
+        data.pop("telefono_numero", None)
+        data.pop("telefono_tipo", None)
 
     # CAMBIO: Manejo especial para productos (generar código temporal para pasar validación)
     if resource == "productos":
@@ -612,13 +613,16 @@ def create_resource(resource):
         service = CRUDService(model)
         obj = service.create(data)
 
-        # CAMBIO: Guardar teléfono de persona si se envió
-        if resource == "personas" and temp_telefono:
+        # CAMBIO: Si se seleccionó/creó un teléfono, vincularlo a la nueva persona
+        if resource == "personas" and temp_telefono_id:
             from .models import Telefonos
             from . import db
-            temp_telefono["id_personas"] = obj.id
-            db.session.add(Telefonos(**temp_telefono))
-            db.session.commit()
+            # Buscamos el teléfono (posiblemente huérfano) y asignamos dueño
+            tf = Telefonos.query.get(temp_telefono_id)
+            if tf:
+                tf.id_personas = obj.id
+                db.session.add(tf)
+                db.session.commit()
 
         # CAMBIO: Actualizar código de producto con el ID real generado
         if resource == "productos":
@@ -633,10 +637,18 @@ def create_resource(resource):
     except IntegrityError as e:
         from . import db
         db.session.rollback() # Revertir la transacción fallida
-        # Mensaje amigable para el usuario
-        
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, Placa, Código, etc)."}), 409
+        print(f"IntegrityError en {resource}: {e}") # Log para debug
+        return jsonify({"error": "El registro ya existe o falta un campo obligatorio."}), 409
+    
+    except SQLAlchemyError as e:
+        from . import db
+        db.session.rollback()
+        print(f"SQLAlchemyError en {resource}: {e}") # Log para ver error de esquema (ej: campo no nulo en DB)
+        return jsonify({"error": f"Error de base de datos: {str(e)}"}), 500
+
     except Exception as e:
+        import traceback
+        traceback.print_exc() # Imprimir stack trace completo en consola
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
 @api_bp.route("/<resource>/<int:id_>", methods=["PUT"])
@@ -655,6 +667,11 @@ def update_resource(resource, id_):
         pwd = data.pop("contrasena")
         if pwd:
             data["contraseña"] = generate_password_hash(pwd)
+    
+    # Manejo especial Personas: Evitar error si viene id_telefono en update
+    if resource == "personas":
+        # Aquí podrías implementar lógica para re-vincular teléfono si quisieras
+        data.pop("id_telefono", None)
 
     ok, err = validate_payload(model, data, partial=True)
     if not ok:
