@@ -247,6 +247,11 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         nestedTitle.textContent = `Crear ${config.title || currentNestedResource}`;
         nestedError.textContent = "";
         
+        // Show modal with loading state
+        nestedForm.innerHTML = '<p style="text-align: center; padding: 20px;">⏳ Cargando...</p>';
+        if (overlay) overlay.style.display = "flex";
+        nestedModal.style.display = "block";
+        
         // Load related data for nested FK fields
         const nestedRelatedData = {};
         const nestedFkFields = config.fields.filter(f => f.name.startsWith("id_") && !f.readOnly);
@@ -267,6 +272,11 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           .filter(f => !f.readOnly && f.name !== "id" && !f.name.startsWith("fecha_"))
           .map(f => {
             const type = f.type || "text";
+            // Determine if field is required based on common patterns
+            const isRequired = f.name === "nombre" || f.name === "placa" || f.name === "cedula" || 
+                             f.name === "codigo" || f.name === "nombre_usuario" ||
+                             (f.name.startsWith("id_") && currentNestedResource === "galpones" && f.name === "id_granja");
+            
             if (f.type === "checkbox") {
               return `
                 <label style="display: block; margin-bottom: 10px;">
@@ -284,15 +294,33 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
               
               return `
                 <label style="display: block; margin-bottom: 10px;">
-                  ${f.label}
+                  ${f.label} ${isRequired ? '<span style="color: red;">*</span>' : ''}
                   <select 
                     name="${f.name}" 
                     style="width: 100%; padding: 6px; box-sizing: border-box;"
+                    ${isRequired ? 'required' : ''}
                   >
                     <option value="">-- Seleccione --</option>
                     ${options}
                   </select>
-                  <small style="color: #666;">Opcional si no aplica</small>
+                  ${!isRequired ? '<small style="color: #666;">Opcional</small>' : ''}
+                </label>
+              `;
+            }
+            return `
+              <label style="display: block; margin-bottom: 10px;">
+                ${f.label} ${isRequired ? '<span style="color: red;">*</span>' : ''}
+                <input 
+                  type="${type}" 
+                  name="${f.name}" 
+                  style="width: 100%; padding: 6px; box-sizing: border-box;"
+                  ${isRequired ? 'required' : ''}
+                >
+              </label>
+            `;
+          })
+          .join("");
+      };
                 </label>
               `;
             }
@@ -333,20 +361,38 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       // Handle nested form save
       nestedSaveBtn.addEventListener("click", async () => {
         nestedError.textContent = "";
+        
+        // Validate required fields
+        const requiredInputs = nestedForm.querySelectorAll('[required]');
+        let hasErrors = false;
+        requiredInputs.forEach(input => {
+          if (!input.value || input.value.trim() === "") {
+            hasErrors = true;
+            input.style.borderColor = "red";
+          } else {
+            input.style.borderColor = "";
+          }
+        });
+        
+        if (hasErrors) {
+          nestedError.textContent = "Por favor complete todos los campos requeridos (*)";
+          return;
+        }
+        
         const formData = new FormData(nestedForm);
         const data = {};
         
         for (const [key, value] of formData.entries()) {
-          if (key.startsWith("id_") || key === "capacidad" || key === "peso_tara") {
+          if (key.startsWith("id_") || key === "capacidad" || key === "peso_tara" || key === "edad_aves_dias") {
             data[key] = value ? parseFloat(value) : undefined;
-          } else if (nestedForm.querySelector(`[name="${key}"]`).type === "checkbox") {
+          } else if (nestedForm.querySelector(`[name="${key}"]`)?.type === "checkbox") {
             data[key] = nestedForm.querySelector(`[name="${key}"]`).checked;
           } else {
             data[key] = value;
           }
         }
 
-        // Remove undefined values
+        // Remove undefined values and empty strings
         Object.keys(data).forEach(key => {
           if (data[key] === undefined || data[key] === "") {
             delete data[key];
