@@ -50,6 +50,20 @@ MODEL_MAP = {
 def serialize(obj):
     return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
 
+@api_bp.route("/metadata/enums", methods=["GET"])
+@jwt_required()
+def get_enums():
+    """
+    Retorna los valores permitidos para campos tipo ENUM (Check Constraints)
+    Útil para llenar select/dropdowns en el Frontend.
+    """
+    return jsonify({
+        "telefonos_estado": ['Celular', 'Casa', 'Trabajo'],
+        "ubicaciones_tipo": ['Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen'],
+        "tickets_tipo": ['Entrada', 'Salida'],
+        "tickets_estado": ['En proceso', 'Finalizado', 'Anulado']
+    })
+
 # ---------- AUTH ----------
 @api_bp.route("/auth/login", methods=["POST"])
 def login():
@@ -137,6 +151,7 @@ def create_usuario_combined():
         # Extract nested data
         persona_data = data.pop("persona", {})
         direccion_data = persona_data.pop("direccion", {})
+        telefonos_data = persona_data.pop("telefonos", []) # <--- AGREGADO: Extraer teléfonos
         
         # Validate required fields
         if not data.get("usuario") or not data.get("contrasena"):
@@ -155,7 +170,16 @@ def create_usuario_combined():
         persona_data["id_direcciones"] = direccion.id
         persona = Personas(**persona_data)
         db.session.add(persona)
-        db.session.flush()
+        db.session.flush() # Get the ID for foreign keys
+        
+        # AGREGADO: Create Telefonos
+        created_phones = []
+        for t_data in telefonos_data:
+            if t_data.get("numero") and t_data.get("estado"):
+                t_data["id_personas"] = persona.id
+                nuevo_t = Telefonos(**t_data)
+                db.session.add(nuevo_t)
+                created_phones.append(nuevo_t)
         
         # Create Usuario
         data["id_personas"] = persona.id
@@ -168,7 +192,8 @@ def create_usuario_combined():
         return jsonify({
             "usuario": serialize(usuario),
             "persona": serialize(persona),
-            "direccion": serialize(direccion)
+            "direccion": serialize(direccion),
+            "telefonos": [serialize(t) for t in created_phones] # AGREGADO: Retornar teléfonos
         }), 201
         
     except IntegrityError as e:
@@ -182,23 +207,7 @@ def create_usuario_combined():
 @jwt_required()
 def create_chofer_combined():
     """
-    Create a Chofer along with its Persona and Direccion in a single transaction.
-    Expected payload:
-    {
-        "id_empresas_transportes": 1,
-        "persona": {
-            "nombre": "Juan",
-            "apellido": "Perez",
-            "cedula": "12345678",
-            "direccion": {
-                "pais": "Venezuela",
-                "estado": "Zulia",
-                "municipio": "Maracaibo",
-                "sector": "Centro",
-                "descripcion": "Calle 1"
-            }
-        }
-    }
+    Create a Chofer along with its Persona and Direccion and Telefonos.
     """
     from . import db
     data = request.get_json(force=True) or {}
@@ -207,6 +216,7 @@ def create_chofer_combined():
         # Extract nested data
         persona_data = data.pop("persona", {})
         direccion_data = persona_data.pop("direccion", {})
+        telefonos_data = persona_data.pop("telefonos", []) # <--- AGREGADO
         
         # Validate required fields
         if not data.get("id_empresas_transportes"):
@@ -224,6 +234,15 @@ def create_chofer_combined():
         persona = Personas(**persona_data)
         db.session.add(persona)
         db.session.flush()
+
+        # AGREGADO: Create Telefonos
+        created_phones = []
+        for t_data in telefonos_data:
+            if t_data.get("numero") and t_data.get("estado"):
+                t_data["id_personas"] = persona.id
+                nuevo_t = Telefonos(**t_data)
+                db.session.add(nuevo_t)
+                created_phones.append(nuevo_t)
         
         # Create Chofer
         data["id_personas"] = persona.id
@@ -235,12 +254,13 @@ def create_chofer_combined():
         return jsonify({
             "chofer": serialize(chofer),
             "persona": serialize(persona),
-            "direccion": serialize(direccion)
+            "direccion": serialize(direccion),
+            "telefonos": [serialize(t) for t in created_phones] # AGREGADO
         }), 201
         
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, etc)."}), 409
+        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, Placa, Código, etc)."}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
@@ -372,14 +392,16 @@ def create_granja_combined():
 @api_bp.route("/combined/usuarios/<int:usuario_id>", methods=["GET"])
 @jwt_required()
 def get_usuario_combined(usuario_id):
-    """Get Usuario with complete Persona and Direccion data"""
+    """Get Usuario with complete Persona, Direccion and Telefonos data"""
     usuario = Usuarios.query.get_or_404(usuario_id)
     persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
     direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
-    
+    telefonos = Telefonos.query.filter_by(id_personas=persona.id).all() if persona else [] # <--- AGREGADO
+
     result = serialize(usuario)
     if persona:
         result["persona"] = serialize(persona)
+        result["persona"]["telefonos"] = [serialize(t) for t in telefonos] # <--- AGREGADO
         if direccion:
             result["persona"]["direccion"] = serialize(direccion)
     
@@ -388,14 +410,16 @@ def get_usuario_combined(usuario_id):
 @api_bp.route("/combined/choferes/<int:chofer_id>", methods=["GET"])
 @jwt_required()
 def get_chofer_combined(chofer_id):
-    """Get Chofer with complete Persona and Direccion data"""
+    """Get Chofer with complete Persona, Direccion and Telefonos data"""
     chofer = Choferes.query.get_or_404(chofer_id)
     persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
     direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
+    telefonos = Telefonos.query.filter_by(id_personas=persona.id).all() if persona else [] # <--- AGREGADO
     
     result = serialize(chofer)
     if persona:
         result["persona"] = serialize(persona)
+        result["persona"]["telefonos"] = [serialize(t) for t in telefonos] # <--- AGREGADO
         if direccion:
             result["persona"]["direccion"] = serialize(direccion)
     
@@ -558,20 +582,51 @@ def create_resource(resource):
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
-    print("Creating resource:", resource, "with data:", data)
     data.pop("created_at", None)
+    data.pop("id", None) # Aseguramos que no venga ID para evitar errores de inserción
 
     # CAMBIO: Manejo especial para usuarios (hashear contraseña)
     if resource == "usuarios" and "contrasena" in data:
         data["contraseña"] = generate_password_hash(data.pop("contrasena"))
 
+    # CAMBIO: Manejo especial para Personas (extraer teléfonos si vienen planos)
+    temp_telefono = None
+    if resource == "personas":
+        t_num = data.pop("telefono_numero", None)
+        t_tipo = data.pop("telefono_tipo", None)
+        if t_num and t_tipo:
+            temp_telefono = {"numero": t_num, "estado": t_tipo}
+
+    # CAMBIO: Manejo especial para productos (generar código temporal para pasar validación)
+    if resource == "productos":
+        import uuid
+        # Usamos un código más corto por si la columna tiene límite de caracteres (ej: VARCHAR(10))
+        data["codigo"] = f"T-{uuid.uuid4().hex[:6]}"
+
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
+        print(f"[{resource}] Error de validación: {err}") # Imprimir error en consola para depuración
         return jsonify({"error": err}), 400
     
     try:
         service = CRUDService(model)
         obj = service.create(data)
+
+        # CAMBIO: Guardar teléfono de persona si se envió
+        if resource == "personas" and temp_telefono:
+            from .models import Telefonos
+            from . import db
+            temp_telefono["id_personas"] = obj.id
+            db.session.add(Telefonos(**temp_telefono))
+            db.session.commit()
+
+        # CAMBIO: Actualizar código de producto con el ID real generado
+        if resource == "productos":
+            obj.codigo = f"PROD-{obj.id}"
+            from . import db
+            db.session.add(obj)
+            db.session.commit()
+            db.session.refresh(obj) # Importante: recargar para devolver el código PROD-ID
 
         return jsonify(serialize(obj)), 201
 
@@ -579,6 +634,7 @@ def create_resource(resource):
         from . import db
         db.session.rollback() # Revertir la transacción fallida
         # Mensaje amigable para el usuario
+        
         return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, Placa, Código, etc)."}), 409
     except Exception as e:
         return jsonify({"error": f"Error interno: {str(e)}"}), 500

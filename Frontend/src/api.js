@@ -25,6 +25,9 @@ export const logout = () => {
 };
 export const getUserInfo = () => api.get("/usuarios/me");
 
+// NUEVO: Obtener Enums
+export const getMetadataEnums = () => api.get("/metadata/enums");
+
 // CRUD genérico
 export const listResource = (resource, params) =>
   api.get(`/${resource}/all`, { params });

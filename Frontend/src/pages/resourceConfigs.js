@@ -1,141 +1,189 @@
 export const resourceConfigs = {
-  usuarios: {
-    title: "Gestión de Usuarios",
-    resource: "combined/usuarios",
+  // --- ELEMENTOS BASE ---
+  direcciones: {
+    title: "Gestión de Direcciones",
+    resource: "direcciones",
     fields: [
-      { name: "usuario", label: "Usuario" },
+      { name: "pais", label: "País", defaultValue: "Venezuela" },
+      { name: "estado", label: "Estado", required: true },
+      { name: "municipio", label: "Municipio", required: true },
+      { name: "sector", label: "Sector" },
+      { name: "descripcion", label: "Punto de Referencia" }, // descripción en BD
+    ],
+  },
+  personas: {
+    title: "Gestión de Personas",
+    resource: "personas",
+    fields: [
+      { name: "cedula", label: "Cédula", required: true },
+      { name: "nombre", label: "Nombre", required: true },
+      { name: "apellido", label: "Apellido", required: true },
+      { name: "id_direcciones", label: "Dirección", required: true },
+      // NUEVOS CAMPOS
+      { name: "telefono_numero", label: "Nro Teléfono", required: false },
       {
-        name: "contrasena",
-        label: "Contraseña",
-        type: "password",
+        name: "telefono_tipo",
+        label: "Tipo Teléfono",
+        type: "select",
+        enumKey: "telefonos_estado",
       },
-      { name: "persona.nombre", label: "Nombre" },
-      { name: "persona.apellido", label: "Apellido" },
-      { name: "persona.cedula", label: "Cédula" },
-      { name: "persona.direccion.pais", label: "País", defaultValue: "Venezuela" },
-      { name: "persona.direccion.estado", label: "Estado" },
-      { name: "persona.direccion.municipio", label: "Municipio" },
-      { name: "persona.direccion.sector", label: "Sector" },
-      { name: "persona.direccion.descripcion", label: "Dirección" },
-      { name: "id_roles", label: "Rol" },
-      { name: "created_at", label: "Fecha", readOnly: true },
     ],
   },
   roles: {
     title: "Gestión de Roles",
     resource: "roles",
+    fields: [{ name: "nombre", label: "Nombre del Rol", required: true }],
+  },
+  ubicaciones: {
+    title: "Ubicaciones (Orígenes/Destinos)",
+    resource: "ubicaciones",
     fields: [
-      { name: "nombre", label: "Nombre del Rol" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      { name: "nombre", label: "Nombre del Sitio", required: true },
+      { name: "tipo", label: "Tipo (Granja/Matadero/Etc)", required: true },
+      { name: "id_direcciones", label: "Dirección Física", required: true },
     ],
   },
-  productos: {
-    title: "Gestión de Productos",
-    resource: "productos",
+
+  // --- RECURSOS PRINCIPALES ---
+  usuarios: {
+    title: "Gestión de Usuarios",
+    resource: "usuarios", // Usamos el endpoint estándar
     fields: [
-      { name: "nombre", label: "Nombre" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      { name: "usuario", label: "Usuario (Login)", required: true },
+      {
+        name: "contrasena",
+        label: "Contraseña",
+        type: "password",
+        required: true,
+      },
+      { name: "id_roles", label: "Rol Asignado", required: true },
+      { name: "id_personas", label: "Datos Personales", required: true },
     ],
   },
   empresas_transporte: {
     title: "Empresas de Transporte",
-    resource: "combined/empresas_transporte",
+    resource: "empresas_transporte", // Endpoint estándar
     fields: [
-      { name: "nombre", label: "Nombre" },
-      { name: "rif", label: "RIF" },
-      { name: "direccion.pais", label: "País", defaultValue: "Venezuela" },
-      { name: "direccion.estado", label: "Estado" },
-      { name: "direccion.municipio", label: "Municipio" },
-      { name: "direccion.sector", label: "Sector" },
-      { name: "direccion.descripcion", label: "Dirección" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      { name: "rif", label: "RIF", required: true },
+      { name: "nombre", label: "Razón Social", required: true },
+      { name: "id_direcciones", label: "Dirección Fiscal", required: true },
     ],
   },
   granjas: {
     title: "Gestión de Granjas",
-    resource: "combined/granjas",
+    resource: "granjas", // Endpoint estándar
     fields: [
-      { name: "ubicacion.nombre", label: "Nombre" },
-      { name: "rif", label: "RIF" },
-      { name: "ubicacion.direccion.pais", label: "País", defaultValue: "Venezuela" },
-      { name: "ubicacion.direccion.estado", label: "Estado" },
-      { name: "ubicacion.direccion.municipio", label: "Municipio" },
-      { name: "ubicacion.direccion.sector", label: "Sector" },
-      { name: "ubicacion.direccion.descripcion", label: "Dirección" },
-      { name: "created_at", label: "Fecha", readOnly: true },
-    ],
-  },
-  galpones: {
-    title: "Gestión de Galpones",
-    resource: "galpones",
-    fields: [
-      { name: "id_granja", label: "Granja" },
-      { name: "nro_galpon", label: "Número de Galpón", type: "number" },
-      { name: "capacidad", label: "Capacidad", type: "number" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      { name: "rif", label: "RIF Granja", required: true },
+      { name: "id_ubicaciones", label: "Ubicación Asociada", required: true },
     ],
   },
   vehiculos: {
     title: "Gestión de Vehículos",
     resource: "vehiculos",
     fields: [
-      { name: "placa", label: "Placa" },
-      { name: "id_empresas_transportes", label: "Empresa Transporte" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      { name: "placa", label: "Placa del Vehículo", required: true },
+      {
+        name: "id_empresas_transportes",
+        label: "Empresa de Transporte",
+        required: true,
+      },
     ],
   },
   choferes: {
     title: "Gestión de Choferes",
-    resource: "combined/choferes",
+    resource: "choferes", // Endpoint estándar
     fields: [
-      { name: "persona.nombre", label: "Nombre" },
-      { name: "persona.apellido", label: "Apellido" },
-      { name: "persona.cedula", label: "Cédula" },
-      { name: "persona.direccion.pais", label: "País", defaultValue: "Venezuela" },
-      { name: "persona.direccion.estado", label: "Estado" },
-      { name: "persona.direccion.municipio", label: "Municipio" },
-      { name: "persona.direccion.sector", label: "Sector" },
-      { name: "persona.direccion.descripcion", label: "Dirección" },
-      { name: "id_empresas_transportes", label: "Empresa Transporte" },
-      { name: "created_at", label: "Fecha", readOnly: true },
+      {
+        name: "id_empresas_transportes",
+        label: "Empresa de Transporte",
+        required: true,
+      },
+      { name: "id_personas", label: "Datos Personales", required: true },
+    ],
+  },
+
+  // --- PROCESOS ---
+  productos: {
+    title: "Gestión de Productos",
+    resource: "productos",
+    fields: [
+      { name: "codigo", label: "Código", readOnly: true },
+      { name: "nombre", label: "Nombre del Producto", required: true },
+    ],
+  },
+  galpones: {
+    title: "Gestión de Galpones",
+    resource: "galpones",
+    fields: [
+      { name: "id_granja", label: "Granja", required: true },
+      {
+        name: "nro_galpon",
+        label: "Número de Galpón",
+        type: "number",
+        required: true,
+      },
+      {
+        name: "capacidad",
+        label: "Capacidad de Aves",
+        type: "number",
+        required: true,
+      },
+    ],
+  },
+  lotes: {
+    title: "Lotes de Aves",
+    resource: "lotes",
+    fields: [
+      { name: "codigo_lote", label: "Código Lote", required: true },
+      { name: "id_galpones", label: "Galpón", required: true },
+      {
+        name: "fecha_alojamiento",
+        label: "Fecha Alojamiento",
+        type: "date",
+        required: true,
+      },
+      {
+        name: "cantidad_aves",
+        label: "Cantidad Inicial",
+        type: "number",
+        required: true,
+      },
+    ],
+  },
+  asignaciones: {
+    title: "Asignación Chofer-Vehículo",
+    resource: "asignaciones",
+    fields: [
+      { name: "id_vehiculos", label: "Vehículo (Placa)", required: true },
+      { name: "id_chofer", label: "Chofer", required: true },
+      { name: "fecha", label: "Fecha Inicio", type: "date", required: true },
+      { name: "hora", label: "Hora Inicio", type: "time", required: true },
+      { name: "active", label: "Activo", type: "checkbox", defaultValue: true },
     ],
   },
   tickets_pesaje: {
-    title: "Tickets de Pesaje",
+    title: "Tickets de Pesaje (Histórico)",
     resource: "tickets_pesaje",
     fields: [
       { name: "nro_ticket", label: "Nro Ticket" },
-      { name: "tipo", label: "Tipo" },
-      { name: "id_asignaciones", label: "Asignación" },
+      { name: "tipo", label: "Tipo Operación" },
+      // Muestra relación compleja
+      { name: "id_asignaciones", label: "Asignación (Veh/Chofer)" },
       { name: "id_producto", label: "Producto" },
-      { name: "id_usuarios_primer_peso", label: "Usuario Primer Peso", readOnly: true },
+      { name: "id_origen", label: "Origen (Granja/Prov)" },
+      { name: "id_destino", label: "Destino (Matadero/Cli)" },
+
       {
         name: "peso_bruto",
-        label: "Peso Bruto (Kg)",
+        label: "Bruto (kg)",
         type: "number",
         readOnly: true,
       },
-      {
-        name: "peso_tara",
-        label: "Peso Tara (Kg)",
-        type: "number",
-        readOnly: true,
-      },
-      {
-        name: "peso_neto",
-        label: "Peso Neto (Kg)",
-        type: "number",
-        readOnly: true,
-      },
-      { name: "id_origen", label: "Origen" },
-      { name: "id_destino", label: "Destino" },
+      { name: "peso_tara", label: "Tara (kg)", type: "number", readOnly: true },
+      { name: "peso_neto", label: "Neto (kg)", type: "number", readOnly: true },
+
+      { name: "estado", label: "Estado", readOnly: true },
       { name: "created_at", label: "Fecha Registro", readOnly: true },
-      {
-        name: "estado",
-        label: "Estado",
-        readOnly: true,
-        defaultValue: "En proceso",
-      },
     ],
   },
 };

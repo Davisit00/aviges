@@ -1,3 +1,12 @@
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = 'GestionRomanaAvicola')
+BEGIN
+    CREATE DATABASE [GestionRomanaAvicola];
+END
+GO
+-- Switch to the newly created database
+USE [GestionRomanaAvicola];
+GO
+
 CREATE TABLE [Direcciones] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
   [pais] varchar(100) NOT NULL,
@@ -25,7 +34,7 @@ CREATE TABLE [Telefonos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
   [id_personas] integer NOT NULL,
   [numero] varchar(20) NOT NULL,
-  [estado] nvarchar(255) NOT NULL CHECK ([estado] IN ('Celular', 'Casa', 'Trabajo')) NOT NULL,
+  [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Celular', 'Casa', 'Trabajo')),
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
 )
@@ -61,6 +70,7 @@ GO
 
 CREATE TABLE [Productos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
+  [codigo] varchar(50) UNIQUE NOT NULL,
   [nombre] varchar(100) NOT NULL,
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
@@ -102,7 +112,7 @@ CREATE TABLE [Ubicaciones] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
   [id_direcciones] integer NOT NULL,
   [nombre] varchar(100) NOT NULL,
-  [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen')) NOT NULL,
+  [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen')),
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
 )
@@ -147,11 +157,11 @@ CREATE TABLE [Ticket_pesaje] (
   [id_origen] integer NOT NULL,
   [id_destino] integer NOT NULL,
   [nro_ticket] varchar(50) UNIQUE NOT NULL,
-  [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Entrada', 'Salida')) NOT NULL,
+  [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Entrada', 'Salida')),
   [peso_bruto] decimal(10,2) NOT NULL,
   [peso_tara] decimal(10,2),
   [peso_neto] decimal(10,2),
-  [estado] nvarchar(255) NOT NULL CHECK ([estado] IN ('En proceso', 'Finalizado', 'Anulado')) NOT NULL,
+  [estado] nvarchar(255) NOT NULL CHECK ([estado] IN ('En proceso', 'Finalizado', 'Anulado')),
   [fecha_primer_peso] datetime NOT NULL,
   [fecha_segundo_peso] datetime,
   [is_deleted] bit NOT NULL DEFAULT (0),
@@ -163,8 +173,10 @@ CREATE TABLE [Viajes_tiempos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
   [id_ticket] integer NOT NULL,
   [hora_salida_granja] datetime,
+  [hora_llegada_romana] datetime,
   [hora_inicio_descarga] datetime,
   [hora_fin_descarga] datetime,
+  [hora_salida_romana] datetime,
   [tiempo_transito] integer,
   [tiempo_espera] integer,
   [tiempo_operacion] integer,

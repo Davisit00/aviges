@@ -57,6 +57,7 @@ class Productos(db.Model):
     __tablename__ = "Productos"
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
+    codigo = db.Column(db.String(50), unique=True, nullable=False)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
 
