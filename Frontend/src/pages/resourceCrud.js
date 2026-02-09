@@ -321,26 +321,6 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           })
           .join("");
       };
-                </label>
-              `;
-            }
-            return `
-              <label style="display: block; margin-bottom: 10px;">
-                ${f.label}
-                <input 
-                  type="${type}" 
-                  name="${f.name}" 
-                  style="width: 100%; padding: 6px; box-sizing: border-box;"
-                  ${f.name === "nombre" || f.name === "placa" || f.name === "cedula" ? "required" : ""}
-                >
-              </label>
-            `;
-          })
-          .join("");
-
-        if (overlay) overlay.style.display = "flex";
-        nestedModal.style.display = "block";
-      };
 
       const hideNestedModal = () => {
         nestedModal.style.display = "none";
@@ -381,12 +361,17 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         
         const formData = new FormData(nestedForm);
         const data = {};
+        const config = resourceConfigs[currentNestedResource];
         
         for (const [key, value] of formData.entries()) {
-          if (key.startsWith("id_") || key === "capacidad" || key === "peso_tara" || key === "edad_aves_dias") {
+          const fieldConfig = config.fields.find(f => f.name === key);
+          const inputElement = nestedForm.querySelector(`[name="${key}"]`);
+          
+          if (inputElement?.type === "checkbox") {
+            data[key] = inputElement.checked;
+          } else if (key.startsWith("id_") || fieldConfig?.type === "number") {
+            // Parse as number for ID fields and numeric fields
             data[key] = value ? parseFloat(value) : undefined;
-          } else if (nestedForm.querySelector(`[name="${key}"]`)?.type === "checkbox") {
-            data[key] = nestedForm.querySelector(`[name="${key}"]`).checked;
           } else {
             data[key] = value;
           }
