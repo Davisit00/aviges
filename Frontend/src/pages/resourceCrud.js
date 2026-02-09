@@ -369,9 +369,14 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
           
           if (inputElement?.type === "checkbox") {
             data[key] = inputElement.checked;
-          } else if (key.startsWith("id_") || fieldConfig?.type === "number") {
-            // Parse as number for ID fields and numeric fields
-            data[key] = value ? parseFloat(value) : undefined;
+          } else if (key.startsWith("id_")) {
+            // Parse as integer for ID fields
+            const numValue = parseInt(value, 10);
+            data[key] = !isNaN(numValue) ? numValue : undefined;
+          } else if (fieldConfig?.type === "number") {
+            // Parse as float for other numeric fields
+            const numValue = parseFloat(value);
+            data[key] = !isNaN(numValue) ? numValue : undefined;
           } else {
             data[key] = value;
           }
