@@ -7,9 +7,10 @@ import { GalponesInterface } from "./galpones.js";
 import { VehiculosInterface } from "./vehiculos.js";
 import { ChoferesInterface } from "./choferes.js";
 import { TicketsPesajeInterface } from "./ticketsPesaje.js";
-import { DetallesTransporteAvesInterface } from "./detallesTransporteAves.js";
 import { TicketsPesajePrintInterface } from "./ticketsPesajePrint.js";
 import { TicketsPesajeCrudInterface } from "./ticketsPesajeCrud.js";
+// IMPORTANTE: Importar la nueva interfaz
+import { WelcomeInterface } from "./welcome.js";
 
 // Variable global para almacenar el rol del usuario
 let currentUserRole = null;
@@ -57,7 +58,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   const productsButton = document.getElementById("products-button");
   const vehiclesButton = document.getElementById("vehicles-button");
   const driversButton = document.getElementById("drivers-button");
-  const transportCompaniesButton = document.getElementById("transport-companies-button");
+  const transportCompaniesButton = document.getElementById(
+    "transport-companies-button",
+  );
   const farmsButton = document.getElementById("farms-button");
   const barnsButton = document.getElementById("barns-button");
   const usersButton = document.getElementById("users-button");
@@ -66,39 +69,89 @@ window.addEventListener("DOMContentLoaded", async () => {
   const logoutButton = document.getElementById("logout-button");
   const weighButton = document.getElementById("weigh-button");
   const ticketPrintButton = document.getElementById("ticket-print-button");
-  const relacionPesajeButton = document.getElementById("weigh-relationship-button");
+  const relacionPesajeButton = document.getElementById(
+    "weigh-relationship-button",
+  );
 
-  // 1. Obtener información del usuario y Rol
-  try {
-    const res = await getUserInfo();
-    const user = res.data;
-    currentUserRole = user.id_roles || user.user_rol;
+  // NEW: Renderizar página de Bienvenida por defecto
+  const appContainer = document.getElementById("content-container");
+  if (appContainer) {
+    render(WelcomeInterface.template, appContainer);
+    WelcomeInterface.setup();
+  }
 
-    // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
-    if (currentUserRole !== 1) {
-      if (usersButton) {
-        // Ocultamos el elemento <li> padre para que desaparezca de la lista
-        usersButton.parentElement.style.display = "none";
+  // NEW: Toggle Menu Button Logic
+  const toggleMenuButton = document.getElementById("toggle-menu-button");
+  const mainMenu = document.querySelector(".main-menu");
+  const contentContainer = document.getElementById("content-container");
+
+  if (toggleMenuButton) {
+    toggleMenuButton.addEventListener("click", () => {
+      mainMenu.classList.toggle("collapsed");
+
+      // Referencias a elementos que cambian de visibilidad
+      const logoImage = document.getElementById("logo-image");
+      const subMenus = document.querySelectorAll(".lists-container ul");
+
+      if (mainMenu.classList.contains("collapsed")) {
+        // MODO COLAPSADO
+
+        // Ocultar texto, flechas, título y logo
+        mainMenu
+          .querySelectorAll(".menu-text, .arrow-icon, h2")
+          .forEach((el) => (el.style.display = "none"));
+        if (logoImage) logoImage.style.display = "none";
+
+        // Cerrar submenús abiertos para evitar desbordamiento visual
+        subMenus.forEach((ul) => ul.classList.remove("show-menu"));
+        mainMenu
+          .querySelectorAll(".arrow-icon.rotated")
+          .forEach((icon) => icon.classList.remove("rotated"));
+
+        // Mostrar iconos colapsados
+        mainMenu
+          .querySelectorAll(".collapsed-icon")
+          .forEach((el) => (el.style.display = "block"));
+      } else {
+        // MODO EXPANDIDO
+        mainMenu.style.width = ""; // Reset to CSS default
+
+        // Mostrar texto, flechas, título y logo
+        mainMenu
+          .querySelectorAll(".menu-text, .arrow-icon, h2")
+          .forEach((el) => (el.style.display = ""));
+        if (logoImage) logoImage.style.display = "";
+
+        // Ocultar iconos colapsados
+        mainMenu
+          .querySelectorAll(".collapsed-icon")
+          .forEach((el) => (el.style.display = "none"));
       }
-    }
-  } catch (error) {
-    console.error("Error obteniendo info del usuario", error);
-    // Opcional: Redirigir si falla la autenticación crítica
+    });
   }
 
   // INICIO FUNCIONALIDAD MENUS DESPLEGABLES
   // Get references to deploy buttons and menus
-  const maintenanceDeployButton = document.getElementById("maintenance-deploy-button");
+  const maintenanceDeployButton = document.getElementById(
+    "maintenance-deploy-button",
+  );
   const processDeployButton = document.getElementById("process-deploy-button");
   const reportsDeployButton = document.getElementById("reports-deploy-button");
-  
+
   const maintenanceMenuList = document.getElementById("maintenance-menu-list");
   const processMenuList = document.getElementById("process-menu-list");
   const reportsMenuList = document.getElementById("reports-menu-list");
 
   // Add event listeners for menu toggling and icon rotation
+  // Configuro esto ANTES de la llamada a la API para que el menú funcione visualmente de inmediato
   if (maintenanceDeployButton) {
     maintenanceDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        // Trigger click to expand
+        toggleMenuButton.click();
+      }
+
       maintenanceMenuList.classList.toggle("show-menu");
       const icon = maintenanceDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
@@ -107,6 +160,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   if (processDeployButton) {
     processDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        toggleMenuButton.click();
+      }
+
       processMenuList.classList.toggle("show-menu");
       const icon = processDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
@@ -115,6 +173,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   if (reportsDeployButton) {
     reportsDeployButton.addEventListener("click", () => {
+      // Si está colapsado, lo abrimos al hacer click en una categoría
+      if (mainMenu.classList.contains("collapsed")) {
+        toggleMenuButton.click();
+      }
+
       reportsMenuList.classList.toggle("show-menu");
       const icon = reportsDeployButton.querySelector(".arrow-icon");
       if (icon) icon.classList.toggle("rotated");
@@ -166,7 +229,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     const app = document.getElementById("content-container");
     render(UsuariosInterface.template, app);
     // Usuarios siempre full permissions porque solo entra admin
-    UsuariosInterface.setup({ canCreate: true, canEdit: true, canDelete: true });
+    UsuariosInterface.setup({
+      canCreate: true,
+      canEdit: true,
+      canDelete: true,
+    });
   });
 
   weighButton.addEventListener("click", () => {
@@ -174,13 +241,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     render(TicketsPesajeInterface.template, app);
     // Tickets usa permisos de 'process'
     TicketsPesajeInterface.setup(getPermissions("process"));
-  });
-
-  avesDetailsButton.addEventListener("click", () => {
-    const app = document.getElementById("content-container");
-    render(DetallesTransporteAvesInterface.template, app);
-    // Detalles Aves usa permisos de 'process'
-    DetallesTransporteAvesInterface.setup(getPermissions("process"));
   });
 
   logoutButton.addEventListener("click", () => {
@@ -200,4 +260,22 @@ window.addEventListener("DOMContentLoaded", async () => {
     render(TicketsPesajeCrudInterface.template, app);
     TicketsPesajeCrudInterface.setup(getPermissions("process"));
   });
+
+  // 1. Obtener información del usuario y Rol
+  try {
+    const res = await getUserInfo();
+    const user = res.data;
+    currentUserRole = user.id_roles || user.user_rol;
+
+    // Si NO es rol 1 (Admin), ocultar botón de gestión de Usuarios
+    if (currentUserRole !== 1) {
+      if (usersButton) {
+        // Ocultamos el elemento <li> padre para que desaparezca de la lista
+        usersButton.parentElement.style.display = "none";
+      }
+    }
+  } catch (error) {
+    console.error("Error obteniendo info del usuario", error);
+    // Opcional: Redirigir si falla la autenticación crítica
+  }
 });
