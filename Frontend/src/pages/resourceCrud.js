@@ -497,28 +497,34 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
 
           // Submit logic with admin credential check
           try {
+            let adminApproved = true;
+            
             // Check if admin credentials are required for this update
-            if (editingId && requiresAdminForEdit) {
-              // Import showAdminCredentialModal dynamically
-              const { showAdminCredentialModal } = await import('../utils.js');
-              const adminApproved = await showAdminCredentialModal();
+            if (editingId) {
+              // Import showAdminCredentialModal once
+              let needsAdminApproval = false;
               
-              if (!adminApproved) {
-                errorEl.textContent = "Actualización cancelada - se requieren credenciales de administrador";
-                return;
+              if (requiresAdminForEdit) {
+                needsAdminApproval = true;
               }
-            }
-
-            // Special check for TicketPesaje finalized status
-            if (editingId && specialEditCheck === 'ticket_finalized') {
-              const currentItem = currentItems.find(item => item.id === editingId);
-              if (currentItem && currentItem.estado === 'Finalizado') {
-                // Require admin credentials for finalized tickets
+              
+              // Special check for TicketPesaje finalized status
+              if (specialEditCheck === 'ticket_finalized') {
+                const currentItem = currentItems.find(item => item.id === editingId);
+                if (currentItem && currentItem.estado === 'Finalizado') {
+                  needsAdminApproval = true;
+                }
+              }
+              
+              // Request admin credentials if needed
+              if (needsAdminApproval) {
                 const { showAdminCredentialModal } = await import('../utils.js');
-                const adminApproved = await showAdminCredentialModal();
+                adminApproved = await showAdminCredentialModal();
                 
                 if (!adminApproved) {
-                  errorEl.textContent = "No se puede editar un ticket finalizado sin credenciales de administrador";
+                  errorEl.textContent = requiresAdminForEdit 
+                    ? "Actualización cancelada - se requieren credenciales de administrador"
+                    : "No se puede editar un ticket finalizado sin credenciales de administrador";
                   return;
                 }
               }

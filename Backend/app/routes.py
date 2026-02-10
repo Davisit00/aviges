@@ -305,11 +305,10 @@ def validate_admin_credentials():
         return jsonify({"error": "usuario y contrasena son requeridos"}), 400
     
     user = Usuarios.query.filter_by(usuario=usuario, is_deleted=False).first()
-    if not user:
-        return jsonify({"valid": False, "is_admin": False, "error": "Usuario no encontrado"}), 200
     
-    if not check_password_hash(user.contraseña, contrasena):
-        return jsonify({"valid": False, "is_admin": False, "error": "Contraseña incorrecta"}), 200
+    # Security: Use same generic message to prevent user enumeration
+    if not user or not check_password_hash(user.contraseña, contrasena):
+        return jsonify({"valid": False, "is_admin": False, "error": "Credenciales inválidas"}), 200
     
     # Check if user is admin (role 1)
     is_admin = user.id_roles == 1

@@ -212,52 +212,6 @@ button.create-related-btn:hover {
     width: 100%;
   }
 }
-form button[type="submit"]:hover {
-  background: #1e40af;
-}
-
-form button[type="button"] {
-  background: #e5e7eb;
-  color: #111827;
-}
-form button[type="button"]:hover {
-  background: #d1d5db;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: var(--shadow);
-}
-
-th,
-td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  font-size: 14px;
-}
-
-th {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-tbody tr:hover {
-  background: #f9fafb;
-}
-
-table button {
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 0;
-  cursor: pointer;
-  font-size: 13px;
-}
 
 table button[data-action="edit"] {
   background: #fde68a;
