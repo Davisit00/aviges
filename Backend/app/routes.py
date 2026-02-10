@@ -77,9 +77,12 @@ class TransactionHelper:
                 raise ValueError(f"Dirección con ID {data['id']} no encontrada")
             return d
         else:
-            # Validar minimos
-            if not data.get("estado"):
-                raise ValueError("El campo 'estado' es requerido para crear una dirección")
+            # Validar campos requeridos
+            required_fields = ["estado", "municipio", "sector"]
+            missing = [f for f in required_fields if not data.get(f)]
+            if missing:
+                raise ValueError(f"Campos requeridos para crear dirección: {', '.join(missing)}")
+            
             # Default pais
             if "pais" not in data: 
                 data["pais"] = "Venezuela"
