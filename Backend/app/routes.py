@@ -686,7 +686,7 @@ def registrar_peso_ticket():
 
     # Verificar cierre
     if ticket.peso_bruto and ticket.peso_tara:
-        ticket.peso_neto = abs(float(ticket.peso_bruto) - float(ticket.peso_tara))
+        # peso_neto es calculado por la base de datos, no lo seteamos aquí
         ticket.estado = "Finalizado"
         ticket.fecha_segundo_peso = datetime.datetime.now()
         ticket.id_usuarios_segundo_peso = current_user_id
