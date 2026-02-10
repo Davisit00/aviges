@@ -181,11 +181,31 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
         <tbody></tbody>
       </table>
     `,
-    setup({ readOnly = false, canCreate = true, canEdit = true } = {}) {
-      if (readOnly && resource !== "tickets_pesaje") {
-        canCreate = false;
-        canEdit = false;
+    setup(permissions = {}) {
+      // Extract permissions with defaults
+      const { 
+        readOnly = false, 
+        canCreate = true, 
+        canEdit = true, 
+        canDelete = true,
+        requiresAdminForEdit = false,
+        specialEditCheck = null,
+        noAccess = false
+      } = permissions;
+
+      // If no access, don't render anything
+      if (noAccess) {
+        const errorEl = document.getElementById(errorId);
+        if (errorEl) {
+          errorEl.textContent = "No tiene permisos para acceder a este recurso";
+        }
+        return;
       }
+
+      // Apply read-only logic
+      let effectiveCanCreate = readOnly ? false : canCreate;
+      let effectiveCanEdit = readOnly ? false : canEdit;
+      let effectiveCanDelete = readOnly ? false : canDelete;
 
       let editingId = null;
       let currentItems = [];
@@ -475,8 +495,35 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             }
           });
 
-          // Submit logic normal...
+          // Submit logic with admin credential check
           try {
+            // Check if admin credentials are required for this update
+            if (editingId && requiresAdminForEdit) {
+              // Import showAdminCredentialModal dynamically
+              const { showAdminCredentialModal } = await import('../utils.js');
+              const adminApproved = await showAdminCredentialModal();
+              
+              if (!adminApproved) {
+                errorEl.textContent = "Actualización cancelada - se requieren credenciales de administrador";
+                return;
+              }
+            }
+
+            // Special check for TicketPesaje finalized status
+            if (editingId && specialEditCheck === 'ticket_finalized') {
+              const currentItem = currentItems.find(item => item.id === editingId);
+              if (currentItem && currentItem.estado === 'Finalizado') {
+                // Require admin credentials for finalized tickets
+                const { showAdminCredentialModal } = await import('../utils.js');
+                const adminApproved = await showAdminCredentialModal();
+                
+                if (!adminApproved) {
+                  errorEl.textContent = "No se puede editar un ticket finalizado sin credenciales de administrador";
+                  return;
+                }
+              }
+            }
+
             if (editingId) await updateResource(resource, editingId, data);
             else await createResource(resource, data);
 
@@ -531,7 +578,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
                  })
                  .join("")}
                <td>
-                 <button class="edit-btn" data-id="${item.id}">Editar</button>
+                 ${effectiveCanEdit ? `<button class="edit-btn" data-id="${item.id}">Editar</button>` : '<span style="color:#999;">Sin permiso</span>'}
                </td>
             </tr>
           `,
@@ -590,13 +637,19 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
       };
 
       // Init Events
-      document
-        .getElementById(`${resource}-new-btn`)
-        ?.addEventListener("click", () => {
-          editingId = null;
-          form.reset();
-          modal.style.display = "flex";
-        });
+      const newBtn = document.getElementById(`${resource}-new-btn`);
+      if (newBtn) {
+        if (!effectiveCanCreate) {
+          newBtn.style.display = 'none';
+        } else {
+          newBtn.addEventListener("click", () => {
+            editingId = null;
+            form.reset();
+            modal.style.display = "flex";
+          });
+        }
+      }
+      
       document
         .getElementById(cancelId)
         ?.addEventListener("click", () => (modal.style.display = "none"));
