@@ -1,4 +1,3 @@
-from enum import unique
 from sqlalchemy import Computed, CheckConstraint
 from sqlalchemy.dialects import mssql
 from .db import db

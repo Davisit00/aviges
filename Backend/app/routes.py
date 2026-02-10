@@ -24,6 +24,9 @@ from . import db
 
 api_bp = Blueprint("api", __name__)
 
+# Constantes de configuración
+DEFAULT_COUNTRY = "Venezuela"
+
 @api_bp.after_request
 def after_request(response):
     response.headers.add('Access-Control-Allow-Origin', '*')
@@ -85,7 +88,7 @@ class TransactionHelper:
             
             # Default pais
             if "pais" not in data: 
-                data["pais"] = "Venezuela"
+                data["pais"] = DEFAULT_COUNTRY
             
             nuevo = Direcciones(**data)
             db.session.add(nuevo)
@@ -653,11 +656,11 @@ def create_ticket_pesaje():
 
         ticket = TicketPesaje(**clean_data)
         db.session.add(ticket)
-        db.session.commit()
+        db.session.flush()  # Get ID without committing
 
-        # Update Nro Ticket Final
+        # Update Nro Ticket Final with the assigned ID
         ticket.nro_ticket = f"TKT-{ticket.id:06d}"
-        db.session.commit()
+        db.session.commit()  # Single commit with final ticket number
 
         return jsonify(serialize(ticket)), 201
 
