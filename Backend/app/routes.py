@@ -448,15 +448,36 @@ def create_lote_combined():
                 db.session.add(ubicacion)
                 db.session.flush()
                 
-                # 2. Persona Responsable (Podria ser existente o nueva, simplificamos a existente ID por ahora o nueva basica)
-                # Asumiremos que el user manda id_persona_responsable, si no tocaría crearla (mas complejidad)
-                if "id_persona_responsable" not in granja_data:
-                     # Fallback simple: crear una dummy o error, asumiremos error por longitud de prompt
-                     return jsonify({"error": "id_persona_responsable requerido para nueva granja"}), 400
+                # 2. Persona Responsable (Puede ser ID existente o datos para crear)
+                persona_responsable_id = granja_data.get("id_persona_responsable")
+                persona_resp_data = granja_data.pop("persona_responsable", {})
+                
+                if not persona_responsable_id:
+                    if not persona_resp_data:
+                        return jsonify({"error": "Se requiere id_persona_responsable o persona_responsable para nueva granja"}), 400
+                    
+                    # Crear persona responsable
+                    dir_resp_data = persona_resp_data.pop("direccion", {})
+                    tlf_resp_data = persona_resp_data.pop("telefonos", [])
+                    
+                    # Direccion para persona responsable
+                    dir_resp = TransactionHelper.get_or_create_direccion(dir_resp_data)
+                    persona_resp_data["id_direcciones"] = dir_resp.id
+                    
+                    persona_resp = Personas(**persona_resp_data)
+                    db.session.add(persona_resp)
+                    db.session.flush()
+                    
+                    # Relaciones de persona responsable
+                    db.session.add(PersonasDirecciones(id_personas=persona_resp.id, id_direcciones=dir_resp.id))
+                    for t in tlf_resp_data:
+                        TransactionHelper.process_telefono(t, persona_resp.id, PersonasTelefonos, "id_personas")
+                    
+                    persona_responsable_id = persona_resp.id
                 
                 granja_v = Granjas(
                     id_ubicaciones=ubicacion.id, 
-                    id_persona_responsable=granja_data["id_persona_responsable"]
+                    id_persona_responsable=persona_responsable_id
                 )
                 db.session.add(granja_v)
                 db.session.flush()
@@ -606,6 +627,14 @@ def create_ticket_pesaje():
             db.session.flush()
             asignacion_id = nueva_asig.id
             data["id_asignaciones"] = asignacion_id
+
+        # Validar campos requeridos que vienen del frontend
+        if "tipo" not in data:
+            return jsonify({"error": "El campo 'tipo' es requerido (Entrada/Salida)"}), 400
+        if data["tipo"] not in ('Entrada', 'Salida'):
+            return jsonify({"error": "El campo 'tipo' debe ser 'Entrada' o 'Salida'"}), 400
+        if "peso_bruto" not in data:
+            return jsonify({"error": "El campo 'peso_bruto' es requerido"}), 400
 
         # Limpiar payload de campos que no existen en TicketPesaje
         clean_data = {k: v for k, v in data.items() if k in [c.name for c in TicketPesaje.__table__.columns]}
