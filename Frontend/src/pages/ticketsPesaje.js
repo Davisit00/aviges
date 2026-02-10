@@ -1,19 +1,47 @@
 import {
   listResource,
   createResource,
-  updateResource,
   getWeighFromTruckScale,
   getUserInfo,
+  api,
 } from "../api.js";
+import { resourceConfigs } from "./resourceConfigs.js";
+
+// Helper visualización labels (Actualizado para manejar objetos anidados como Combined Choferes)
+const getDisplayLabel = (item) => {
+  if (!item) return "";
+
+  // Vehiculo
+  if (item.placa)
+    return item.placa + (item.descripcion ? ` - ${item.descripcion}` : "");
+
+  // Chofer (Manejo de respuesta /combined/choferes que incluye 'persona')
+  if (item.persona) {
+    return `${item.persona.cedula} - ${item.persona.nombre} ${item.persona.apellido}`;
+  }
+  // Chofer (Fallback si viene plano o es un objeto Persona directo)
+  if (item.cedula)
+    return `${item.cedula} - ${item.nombre || ""} ${item.apellido || ""}`;
+
+  // Producto
+  if (item.codigo && item.nombre) return `${item.codigo} - ${item.nombre}`;
+
+  // Ubicacion
+  if (item.nombre && item.tipo) return `${item.tipo} - ${item.nombre}`; // Ej: Granja - La Rosita
+
+  // Generico
+  if (item.nombre) return item.nombre;
+  return item.id;
+};
 
 export const TicketsPesajeInterface = {
   template: `
     <div class="tickets-container">
       <div class="header-actions" style="display: flex; gap: 20px; margin-bottom: 20px;">
-        <button id="btn-entrada" style="padding: 15px 30px; font-size: 1.2em; background-color: #4CAF50; color: white; cursor: pointer;">
+        <button id="btn-entrada" style="padding: 15px 30px; font-size: 1.2em; background-color: #4CAF50; color: white; cursor: pointer; border:none; border-radius:4px;">
            🚛 Registrar ENTRADA (Materia Prima)
         </button>
-        <button id="btn-salida" style="padding: 15px 30px; font-size: 1.2em; background-color: #2196F3; color: white; cursor: pointer;">
+        <button id="btn-salida" style="padding: 15px 30px; font-size: 1.2em; background-color: #2196F3; color: white; cursor: pointer; border:none; border-radius:4px;">
            🚚 Registrar SALIDA (Despacho)
         </button>
       </div>
@@ -21,106 +49,153 @@ export const TicketsPesajeInterface = {
       <div id="error-msg" style="color: red; margin-bottom: 10px; font-weight: bold;"></div>
 
       <!-- SECCIÓN DE LISTADO DE ESPERA -->
-      <div id="wait-list-section">
+      <div id="wait-list-section" style="background:white; padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
           <h3>⏳ Vehículos en Planta (En Espera de Segundo Pesaje)</h3>
           <p><i>Haga doble click sobre un vehículo para completar su pesaje y finalizar el ticket.</i></p>
-          <table id="pending-tickets-table" border="1" cellpadding="8" cellspacing="0" style="width: 100%; margin-top: 10px;">
+          <table id="pending-tickets-table" style="width: 100%; margin-top: 10px; border-collapse: collapse;">
             <thead>
-                <tr>
-                    <th>Ticket #</th>
-                    <th>Tipo</th>
-                    <th>Placa</th>
-                    <th>Producto</th>
-                    <th>Chofer</th>
-                    <th>1er Peso</th>
-                    <th>Fecha</th>
-                    <th>Estado</th>
+                <tr style="background:#f8f9fa; border-bottom:2px solid #dee2e6;">
+                    <th style="padding:12px; text-align:left;">Ticket #</th>
+                    <th style="padding:12px; text-align:left;">Tipo</th>
+                    <th style="padding:12px; text-align:left;">Placa</th>
+                    <th style="padding:12px; text-align:left;">Chofer</th>
+                    <th style="padding:12px; text-align:left;">Ruta</th>
+                    <th style="padding:12px; text-align:left;">Producto</th>
+                    <th style="padding:12px; text-align:left;">1er Peso</th>
+                    <th style="padding:12px; text-align:left;">Fecha</th>
+                    <th style="padding:12px; text-align:left;">Estado</th>
                 </tr>
             </thead>
             <tbody></tbody>
           </table>
       </div>
+    </div>
 
-      <!-- MODAL / FORMULARIO (Oculto por defecto) -->
-    
-        <div id="ticket-modal"style="display:none; background: white; width: 60%; margin: 5% auto; padding: 20px; border-radius: 8px; max-height: 90vh; overflow-y: auto;">
-            <h2 id="modal-title">Nuevo Ticket</h2>
+    <!-- MODAL INTEGRADO (OVERLAY + CONTENIDO) -->
+    <div id="local-modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+        
+        <div id="ticket-modal" style="background: white; width: 70%; max-width: 900px; padding: 25px; border-radius: 8px; max-height: 90vh; overflow-y: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 id="modal-title" style="margin:0;">Nuevo Ticket</h2>
+                <button id="btn-close-x" style="background:none; border:none; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
             
-            <form id="ticket-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <form id="ticket-form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 
-                <!-- Campos ocultos -->
                 <input type="hidden" name="id">
                 <input type="hidden" name="id_usuario">
                 <input type="hidden" name="estado" value="En Proceso">
 
-                 <!-- Fila 1 -->
-                <div>
-                    <label>Tipo de Proceso</label>
-                    <input type="text" name="tipo_proceso" readonly style="background: #eee;">
-                </div>
-                 <div style="display:none;">
-                    <label>Nro Ticket</label>
-                    <input type="text" name="nro_ticket" readonly>
+                <!-- 1. INFO PROCESO -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; grid-column: span 2; background:#f5f5f5; padding:15px; border-radius:5px;">
+                    <div>
+                        <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Proceso</label>
+                        <input type="text" name="tipo_proceso" readonly style="width:100%; padding:8px; border:1px solid #ccc;">
+                    </div>
+                     <div>
+                        <label style="display:block; font-weight:bold; margin-bottom:5px;">Nro Ticket (Auto)</label>
+                        <input type="text" name="nro_ticket" readonly style="width:100%; padding:8px; border:1px solid #ccc; background:#e9ecef;">
+                    </div>
                 </div>
 
-                <!-- Fila 2: Selectores con Buscador (Datalist) -->
+                <!-- 2. TRANSPORTE -->
                 <div>
-                    <label>Vehículo (Placa)</label>
-                    <input list="list-vehiculos" id="search-vehiculo" placeholder="Buscar placa..." autocomplete="off">
-                    <datalist id="list-vehiculos"></datalist>
-                    <input type="hidden" name="id_vehiculo">
+                    <label style="display:block; margin-bottom:5px;">Vehículo</label>
+                    <div style="display: flex; gap: 8px;">
+                        <div style="flex: 1;">
+                            <input list="list-vehiculos" id="search-id_vehiculo" placeholder="Buscar placa..." autocomplete="off" style="width:100%; padding:8px;">
+                            <datalist id="list-vehiculos"></datalist>
+                            <input type="hidden" name="id_vehiculo">
+                        </div>
+                        <button type="button" class="create-related-btn" data-resource="vehiculos" data-target="id_vehiculo"
+                         style="padding: 0 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;"
+                         title="Nuevo Vehículo">+</button>
+                    </div>
                 </div>
                  <div>
-                    <label>Chofer</label>
-                    <input list="list-choferes" id="search-chofer" placeholder="Buscar chofer..." autocomplete="off">
-                    <datalist id="list-choferes"></datalist>
-                    <input type="hidden" name="id_chofer">
+                    <label style="display:block; margin-bottom:5px;">Chofer</label>
+                     <div style="display: flex; gap: 8px;">
+                        <div style="flex: 1;">
+                            <input list="list-choferes" id="search-id_chofer" placeholder="Buscar chofer..." autocomplete="off" style="width:100%; padding:8px;">
+                            <datalist id="list-choferes"></datalist>
+                            <input type="hidden" name="id_chofer">
+                        </div>
+                        <button type="button" class="create-related-btn" data-resource="choferes" data-target="id_chofer"
+                         style="padding: 0 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;"
+                         title="Nuevo Chofer">+</button>
+                    </div>
                 </div>
 
-                <!-- Fila 3 -->
+                <!-- 3. RUTA -->
+                <div>
+                    <label style="display:block; margin-bottom:5px;">Origen</label>
+                    <div style="display: flex; gap: 8px;">
+                         <select name="id_origen" id="select-origen" style="width:100%; padding:8px; flex:1"></select>
+                         <button type="button" class="create-related-btn" data-resource="ubicaciones" data-target="id_origen"
+                         style="padding: 0 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;"
+                         title="Nueva Ubicación">+</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:5px;">Destino</label>
+                     <div style="display: flex; gap: 8px;">
+                         <select name="id_destino" id="select-destino" style="width:100%; padding:8px; flex:1"></select>
+                         <button type="button" class="create-related-btn" data-resource="ubicaciones" data-target="id_destino"
+                         style="padding: 0 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;"
+                         title="Nueva Ubicación">+</button>
+                    </div>
+                </div>
+
+                <!-- 4. PRODUCTO -->
                 <div style="grid-column: span 2;">
-                    <label>Producto</label>
-                    <input list="list-productos" id="search-producto" placeholder="Buscar producto..." style="width: 100%;" autocomplete="off">
-                    <datalist id="list-productos"></datalist>
-                    <input type="hidden" name="id_producto">
+                    <label style="display:block; margin-bottom:5px;">Producto</label>
+                    <div style="display: flex; gap: 8px;">
+                        <div style="flex: 1;">
+                            <input list="list-productos" id="search-id_producto" placeholder="Buscar producto..." style="width: 100%; padding:8px;" autocomplete="off">
+                            <datalist id="list-productos"></datalist>
+                            <input type="hidden" name="id_producto">
+                        </div>
+                        <button type="button" class="create-related-btn" data-resource="productos" data-target="id_producto"
+                         style="padding: 0 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;"
+                         title="Nuevo Producto">+</button>
+                    </div>
                 </div>
 
-                <!-- SECCIÓN DE PESOS -->
-                <div style="background: #f0f7ff; padding: 10px; grid-column: span 2; border: 1px solid #cce5ff;">
-                    <h3 style="margin-top:0;">Pesaje</h3>
+                <!-- 5. PESAJE -->
+                <div style="background: #e3f2fd; padding: 15px; grid-column: span 2; border: 1px solid #90caf9; border-radius:5px;">
+                    <h3 style="margin-top:0; color:#1565c0;">⚖️ Balanza</h3>
                     
                     <div style="display: flex; gap: 20px; align-items: flex-end;">
                         <div style="flex: 1;">
-                            <label style="font-weight: bold;">Peso BRUTO (Full)</label>
-                            <input type="number" name="peso_bruto" id="input-bruto" readonly style="background: #e9e9e9;">
-                            <button type="button" id="btn-cap-bruto" class="capture-btn" style="margin-top: 5px; width: 100%;">⚖️ Capturar Bruto</button>
+                            <label style="font-weight: bold; display:block;">Peso BRUTO (Full)</label>
+                            <input type="number" name="peso_bruto" id="input-bruto" readonly style="width:100%; padding:8px; margin-bottom:5px;">
+                            <button type="button" id="btn-cap-bruto" class="capture-btn" style="width:100%; padding:8px; cursor:pointer;">⚖️ Capturar</button>
                         </div>
                         <div style="flex: 1;">
-                            <label style="font-weight: bold;">Peso TARA (Vacío)</label>
-                            <input type="number" name="peso_tara" id="input-tara" readonly style="background: #e9e9e9;">
-                            <button type="button" id="btn-cap-tara" class="capture-btn" style="margin-top: 5px; width: 100%;">⚖️ Capturar Tara</button>
+                            <label style="font-weight: bold; display:block;">Peso TARA (Vacío)</label>
+                            <input type="number" name="peso_tara" id="input-tara" readonly style="width:100%; padding:8px; margin-bottom:5px;">
+                            <button type="button" id="btn-cap-tara" class="capture-btn" style="width:100%; padding:8px; cursor:pointer;">⚖️ Capturar</button>
                         </div>
                          <div style="flex: 1;">
-                            <label style="font-weight: bold;">Peso NETO</label>
-                            <input type="number" name="peso_neto" id="input-neto" readonly style="background: #ffffcc; font-weight: bold;">
+                            <label style="font-weight: bold; display:block;">Peso NETO</label>
+                            <input type="number" name="peso_neto" id="input-neto" readonly style="width:100%; padding:8px; background: #fff3cd; font-weight: bold;">
                         </div>
                     </div>
                 </div>
 
-                <!-- Fila Extras -->
+                <!-- 6. EXTRAS -->
                 <div>
-                     <label>Cantidad Cestas</label>
-                     <input type="number" name="cantidad_cestas">
+                     <label style="display:block; margin-bottom:5px;">Cantidad Cestas</label>
+                     <input type="number" name="cantidad_cestas" style="width:100%; padding:8px;">
                 </div>
                 <div>
-                     <label>Peso Avisado (Guía)</label>
-                     <input type="number" name="peso_avisado">
+                     <label style="display:block; margin-bottom:5px;">Peso Avisado</label>
+                     <input type="number" name="peso_avisado" style="width:100%; padding:8px;">
                 </div>
 
-                <!-- Botones de Acción -->
-                <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                    <button type="button" id="btn-cancel" style="padding: 10px 20px; background: #999; color: white; border: none; cursor: pointer;">Cancelar</button>
-                    <button type="submit" id="btn-save" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold;">GUARDAR</button>
+                <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 15px; margin-top: 20px; border-top:1px solid #eee; padding-top:20px;">
+                    <button type="button" id="btn-cancel" style="padding: 10px 20px; background: #6c757d; color: white; border: none; cursor: pointer; border-radius:4px;">Cancelar</button>
+                    <button type="submit" id="btn-save" style="padding: 10px 30px; background: #28a745; color: white; border: none; cursor: pointer; font-weight: bold; border-radius:4px;">GUARDAR TICKET</button>
                 </div>
 
             </form>
@@ -129,443 +204,514 @@ export const TicketsPesajeInterface = {
   `,
 
   setup(permissions = {}) {
-    let vehiclesList = [];
-    let driversList = [];
-    let productsList = [];
+    // --- ESTADO ---
+    let listData = {
+      vehiculos: [],
+      choferes: [],
+      productos: [],
+      ubicaciones: [],
+      asignaciones: [], // NECESARIO: Relación Ticket -> [Asignacion] -> Chofer/Vehiculo
+    };
     let pendingTickets = [];
     let currentUser = null;
-    let currentMode = "create"; // 'create' | 'complete'
+    let currentMode = "create";
 
-    // DOM Elements
+    // --- DOM Elements ---
     const form = document.getElementById("ticket-form");
-    const modal = document.getElementById("ticket-modal");
+    const overlay = document.getElementById("local-modal-overlay");
     const tableBody = document.querySelector("#pending-tickets-table tbody");
     const errorMsg = document.getElementById("error-msg");
-
-    // Overlay (padre del modal)
-    const overlay = document.getElementById("modal-overlay");
-    if (overlay && modal && modal.parentElement !== overlay) {
-      overlay.appendChild(modal);
-      overlay.style.display = "none";
-      overlay.style.position = "fixed";
-      overlay.style.top = "0";
-      overlay.style.left = "0";
-      overlay.style.width = "100%";
-      overlay.style.height = "100%";
-      overlay.style.backgroundColor = "rgba(0,0,0,0.5)";
-      overlay.style.opacity = "1";
-      overlay.style.zIndex = "10000000";
-    }
-
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) {
-        // Clic fuera del modal
-        toggleModal(false);
-      }
-    });
-
-    // Inputs
     const inputBruto = document.getElementById("input-bruto");
     const inputTara = document.getElementById("input-tara");
     const inputNeto = document.getElementById("input-neto");
     const btnBruto = document.getElementById("btn-cap-bruto");
     const btnTara = document.getElementById("btn-cap-tara");
 
-    // --- FUNCIONES AUXILIARES ---
-
-    const setError = (msg) => (errorMsg.textContent = msg || "");
-
+    // --- HELPERS ---
     const calculateNeto = () => {
       const b = parseFloat(inputBruto.value) || 0;
       const t = parseFloat(inputTara.value) || 0;
-      if (b > 0 && t > 0) {
-        inputNeto.value = Math.abs(b - t).toFixed(2);
-      } else {
-        inputNeto.value = "";
-      }
+      if (b > 0 && t > 0) inputNeto.value = Math.abs(b - t).toFixed(2);
+      else inputNeto.value = "";
     };
 
     const toggleModal = (show) => {
-      modal.style.display = show ? "block" : "none";
-      if (overlay) overlay.style.display = show ? "flex" : "none";
-      setError("");
-      if (!show) form.reset();
-    };
-
-    // --- CARGA DE DATOS ---
-
-    const loadLists = async () => {
-      try {
-        const [vRes, dRes, pRes, uRes] = await Promise.all([
-          listResource("vehiculos", { per_page: 1000 }),
-          listResource("choferes", { per_page: 1000 }),
-          listResource("productos", { per_page: 1000 }),
-          getUserInfo(),
-        ]);
-
-        vehiclesList = vRes.data.items || vRes.data;
-        driversList = dRes.data.items || dRes.data;
-        productsList = pRes.data.items || pRes.data;
-        currentUser = uRes.data;
-
-        populateDatalist(
-          "list-vehiculos",
-          vehiclesList,
-          (i) => `${i.placa} - ${i.descripcion || ""}`,
-        );
-        populateDatalist(
-          "list-choferes",
-          driversList,
-          (i) =>
-            `${i.info?.cedula || i.cedula} - ${i.info?.nombre || i.nombre}`,
-        );
-        populateDatalist(
-          "list-productos",
-          productsList,
-          (i) => `${i.codigo} - ${i.nombre}`,
-        );
-      } catch (error) {
-        setError("Error cargando listas de datos.");
-        console.error(error);
+      overlay.style.display = show ? "flex" : "none";
+      if (!show) {
+        form.reset();
+        errorMsg.textContent = "";
       }
     };
 
-    const populateDatalist = (id, items, labelFn) => {
-      const dl = document.getElementById(id);
-      dl.innerHTML = "";
-      items.forEach((item) => {
-        const opt = document.createElement("option");
-        opt.value = labelFn(item);
-        opt.dataset.id = item.id; // Guardamos ID aunque datalist no lo envia nativamente
-        dl.appendChild(opt);
-      });
+    // --- QUICK CREATE (Relacionados) ---
+    const openQuickCreate = (resourceName, targetField) => {
+      const config = resourceConfigs[resourceName];
+      if (!config) {
+        alert("Error conf: " + resourceName);
+        return;
+      }
+
+      const div = document.createElement("div");
+      div.style.cssText = `position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; justify-content:center; align-items:center;`;
+
+      const formHtml = config.fields
+        .map((f) => {
+          if (f.readOnly || f.hidden || f.name === "id") return "";
+          const req = f.required ? "required" : "";
+
+          // Simple Select handling for quick create
+          if (f.type === "select") {
+            return `<label style="display:block; margin-bottom:10px;">${f.label} 
+                <select name="${f.name}" style="width:100%;" ${req}><option value="">--</option><option>A</option><option>B</option></select></label>`;
+          }
+          if (f.name.startsWith("id_")) return ""; // Simplificación
+          return `<label style="display:block; margin-bottom:10px;">${f.label} <input type="${f.type || "text"}" name="${f.name}" style="width:100%;" ${req}></label>`;
+        })
+        .join("");
+
+      div.innerHTML = `
+        <div style="background:white; padding:20px; border-radius:8px; width:400px; max-height:90vh; overflow:auto;">
+            <h3>Nuevo ${config.title}</h3>
+            <form id="quick-form">
+                ${formHtml}
+                <div style="margin-top:20px; text-align:right;">
+                    <button type="button" id="quick-cancel" style="margin-right:10px;">Cancelar</button>
+                    <button type="submit">Guardar</button>
+                </div>
+            </form>
+        </div>
+      `;
+      document.body.appendChild(div);
+
+      div.querySelector("#quick-cancel").onclick = () =>
+        document.body.removeChild(div);
+
+      div.querySelector("#quick-form").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const data = Object.fromEntries(fd.entries());
+        // Conversiones
+        for (let k in data) {
+          if (e.target.querySelector(`[name="${k}"]`).type === "number")
+            data[k] = parseFloat(data[k]);
+        }
+        try {
+          const res = await createResource(resourceName, data);
+          const newItem = res.data;
+
+          if (listData[resourceName]) {
+            listData[resourceName].push(newItem);
+            // Update Datalist/Select
+            const mapLists = {
+              vehiculos: "list-vehiculos",
+              choferes: "list-choferes",
+              productos: "list-productos",
+            };
+            if (mapLists[resourceName]) {
+              const dl = document.getElementById(mapLists[resourceName]);
+              const opt = document.createElement("option");
+              opt.value = getDisplayLabel(newItem);
+              opt.dataset.id = newItem.id;
+              dl.appendChild(opt);
+
+              // Auto-fill form
+              const searchIn = document.getElementById(`search-${targetField}`);
+              if (searchIn) searchIn.value = getDisplayLabel(newItem);
+              const hiddenIn = form.querySelector(`[name="${targetField}"]`);
+              if (hiddenIn) hiddenIn.value = newItem.id;
+            }
+            if (resourceName === "ubicaciones") {
+              ["select-origen", "select-destino"].forEach((sid) => {
+                const sel = document.getElementById(sid);
+                const opt = document.createElement("option");
+                opt.value = newItem.id;
+                opt.textContent = getDisplayLabel(newItem);
+                sel.appendChild(opt);
+              });
+            }
+          }
+          document.body.removeChild(div);
+        } catch (err) {
+          alert("Error: " + (err.response?.data?.error || err.message));
+        }
+      };
+    };
+
+    // --- DATA LOADING ---
+    const loadLists = async () => {
+      try {
+        const [vRes, dRes, pRes, uRes, lRes, aRes] = await Promise.all([
+          listResource("vehiculos", { per_page: 1000 }),
+          listResource("combined/choferes", { per_page: 1000 }), // IMPORTANTE: Combined para tener nombres
+          listResource("productos", { per_page: 1000 }),
+          getUserInfo(),
+          listResource("ubicaciones", { per_page: 1000 }),
+          listResource("asignaciones", { per_page: 1000 }), // NECESARIO: Para resolver FKs del ticket
+        ]);
+
+        listData.vehiculos = vRes.data.items || vRes.data;
+        listData.choferes = dRes.data.items || dRes.data;
+        listData.productos = pRes.data.items || pRes.data;
+        currentUser = uRes.data;
+        listData.ubicaciones = lRes.data.items || lRes.data;
+        listData.asignaciones = aRes.data.items || aRes.data;
+
+        initDatalists();
+        initSelects();
+      } catch (error) {
+        console.error(error);
+        errorMsg.textContent = "Error cargando datos maestros.";
+      }
+    };
+
+    const initDatalists = () => {
+      const populate = (id, items) => {
+        const dl = document.getElementById(id);
+        dl.innerHTML = "";
+        items.forEach((item) => {
+          const opt = document.createElement("option");
+          opt.value = getDisplayLabel(item);
+          opt.dataset.id = item.id;
+          dl.appendChild(opt);
+        });
+      };
+      populate("list-vehiculos", listData.vehiculos);
+      populate("list-choferes", listData.choferes);
+      populate("list-productos", listData.productos);
+    };
+
+    const initSelects = () => {
+      const populateSel = (id) => {
+        const sel = document.getElementById(id);
+        const oldVal = sel.value;
+        sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+        listData.ubicaciones.forEach((loc) => {
+          const opt = document.createElement("option");
+          opt.value = loc.id;
+          opt.textContent = getDisplayLabel(loc);
+          sel.appendChild(opt);
+        });
+        if (oldVal) sel.value = oldVal;
+      };
+      populateSel("select-origen");
+      populateSel("select-destino");
     };
 
     const loadPendingTickets = async () => {
       try {
-        // Solo cargamos los que están "En Proceso"
         const res = await listResource("tickets_pesaje", {
           estado: "En Proceso",
           sort: "id",
           order: "desc",
         });
         pendingTickets = (res.data.items || res.data || []).filter(
-          (ticket) => ticket.estado === "En Proceso",
+          (t) => t.estado === "En Proceso",
         );
-        console.log("Pending Tickets:", pendingTickets);
         renderTable();
       } catch (error) {
-        setError("Error cargando tickets en espera.");
+        console.error(error);
       }
     };
 
     const renderTable = () => {
       tableBody.innerHTML = "";
       if (pendingTickets.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;">No hay vehículos en espera.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:20px;">No hay vehículos en espera.</td></tr>`;
         return;
       }
 
       pendingTickets.forEach((ticket) => {
-        // Helpers para mostrar nombres
-        const vehiculo =
-          vehiclesList.find((v) => v.id == ticket.id_vehiculo)?.placa ||
-          ticket.id_vehiculo;
-        const producto =
-          productsList.find((p) => p.id == ticket.id_producto)?.nombre ||
-          ticket.id_producto;
-        const chofer =
-          driversList.find((c) => c.id == ticket.id_chofer)?.nombre ||
-          ticket.id_chofer;
-        const pesoInicial =
+        // 1. Resolver Asignacion
+        const asignacion = listData.asignaciones.find(
+          (a) => a.id == ticket.id_asignaciones,
+        );
+        let vehiculo = null;
+        let chofer = null;
+
+        if (asignacion) {
+          // Nota: id_vehiculos es PLURAL en modelo Asignaciones, pero id_chofer es SINGULAR
+          vehiculo = listData.vehiculos.find(
+            (v) => v.id == asignacion.id_vehiculos,
+          );
+          chofer = listData.choferes.find((c) => c.id == asignacion.id_chofer);
+        }
+
+        const producto = listData.productos.find(
+          (p) => p.id == ticket.id_producto,
+        );
+        const origen = listData.ubicaciones.find(
+          (l) => l.id == ticket.id_origen,
+        );
+        const destino = listData.ubicaciones.find(
+          (l) => l.id == ticket.id_destino,
+        );
+        const peso =
           ticket.peso_bruto > 0
             ? `Bruto: ${ticket.peso_bruto}`
             : `Tara: ${ticket.peso_tara}`;
 
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-                <td>${ticket.nro_ticket || ticket.id}</td>
-                <td>${ticket.tipo_proceso}</td>
-                <td>${vehiculo}</td>
-                <td>${producto}</td>
-                <td>${chofer}</td>
-                <td>${pesoInicial}</td>
-                <td>${new Date(ticket.created_at || ticket.fecha_registro).toLocaleString()}</td>
-                <td><span style="background:orange; padding:2px 5px; border-radius:4px;">${ticket.estado}</span></td>
-            `;
         tr.style.cursor = "pointer";
-        tr.title = "Doble click para pesar salida";
-
-        // Evento Doble Click para Completar
+        tr.innerHTML = `
+            <td style="padding:10px; border-bottom:1px solid #eee">${ticket.nro_ticket || ticket.id}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee"><b>${ticket.tipo}</b></td>
+            <td style="padding:10px; border-bottom:1px solid #eee">${getDisplayLabel(vehiculo) || "N/A"}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee">${getDisplayLabel(chofer) || "N/A"}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee"><small>${origen?.nombre || "--"} &rarr; ${destino?.nombre || "--"}</small></td>
+            <td style="padding:10px; border-bottom:1px solid #eee">${producto ? producto.nombre : "N/A"}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee">${peso}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee">${new Date(ticket.created_at).toLocaleString()}</td>
+            <td style="padding:10px; border-bottom:1px solid #eee"><span style="background:#fff3cd; padding:2px 5px; border-radius:4px;">${ticket.estado}</span></td>
+        `;
         tr.addEventListener("dblclick", () => openCompleteModal(ticket));
-
         tableBody.appendChild(tr);
       });
     };
 
-    // --- LÓGICA DE CAPTURA DE PESO (Reutilizada y Robusta) ---
-    const handleCapture = async (inputElement, btnElement) => {
-      btnElement.disabled = true;
-      btnElement.textContent = "⏳ Leyendo...";
+    // --- BALANZA ---
+    const handleCapture = async (input, btn) => {
+      btn.disabled = true;
+      btn.textContent = "...";
       try {
         const res = await getWeighFromTruckScale();
-        console.log("Weigh raw:", res);
-
-        let weight = null;
-        if (res.data && typeof res.data === "object") {
-          if (res.data.weight !== undefined) weight = res.data.weight;
-          else if (res.data.data !== undefined) weight = res.data.data;
-          else if (res.data.value !== undefined) weight = res.data.value;
-          else if (res.data.reading !== undefined) weight = res.data.reading;
-        } else {
-          weight = res.data;
-        }
-
-        if (weight === null || typeof weight === "object")
-          throw new Error("Formato inválido");
-
-        inputElement.value = weight;
+        let val = 0;
+        if (typeof res.data === "number") val = res.data;
+        else if (res.data?.weight) val = res.data.weight;
+        else if (res.data?.data) val = parseFloat(res.data.data);
+        if (!val) throw new Error("Lectura vacía");
+        input.value = val;
         calculateNeto();
-      } catch (err) {
-        console.error(err);
-        alert("Error balanza: " + (err.message || "Desconocido"));
+      } catch (e) {
+        alert("Error: " + (e.message || "Balanza no responde"));
       } finally {
-        btnElement.disabled = false;
-        btnElement.textContent = "⚖️ Capturar";
-        // Bloqueo lógico: si ya hay valor, no deberíamos capturar de nuevo salvo corrección
+        btn.disabled = false;
+        btn.textContent = "⚖️ Capturar";
       }
     };
-
     btnBruto.addEventListener("click", () =>
       handleCapture(inputBruto, btnBruto),
     );
     btnTara.addEventListener("click", () => handleCapture(inputTara, btnTara));
 
-    // --- APERTURA DE FORMULARIOS ---
+    // --- SEARCH LISTENERS ---
+    const setupSearchListener = (inputId, hiddenName, dataSource) => {
+      document.getElementById(inputId).addEventListener("change", (e) => {
+        const val = e.target.value;
+        const item = dataSource.find((i) => getDisplayLabel(i) === val);
+        form.querySelector(`[name="${hiddenName}"]`).value = item
+          ? item.id
+          : "";
+      });
+    };
 
-    // 1. Crear Nuevo Ticket
+    // --- UI/UX ---
+    form.addEventListener("click", (e) => {
+      if (e.target.classList.contains("create-related-btn")) {
+        const { resource, target } = e.target.dataset;
+        openQuickCreate(resource, target);
+      }
+    });
+
+    const toggleFields = (enabled) => {
+      const ids = [
+        "search-id_vehiculo",
+        "search-id_chofer",
+        "search-id_producto",
+        "select-origen",
+        "select-destino",
+      ];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+      });
+      form
+        .querySelectorAll(".create-related-btn")
+        .forEach((b) => (b.disabled = !enabled));
+    };
+
     const openCreateModal = (type) => {
-      // type: 'Entrada' | 'Salida'
-      toggleModal(true);
       currentMode = "create";
+      toggleModal(true);
       document.getElementById("modal-title").textContent =
-        `Registrar Nueva ${type.toUpperCase()}`;
-
-      // Asignar tipo
+        `Nueva ${type.toUpperCase()}`;
       form.querySelector('[name="tipo_proceso"]').value = type;
       form.querySelector('[name="id_usuario"]').value = currentUser?.id || "";
+      toggleFields(true);
 
-      // Resetear IDs ocultos
-      form.querySelector('[name="id"]').value = "";
-      form.querySelector('[name="peso_bruto"]').value = "";
-      form.querySelector('[name="peso_tara"]').value = "";
-      form.querySelector('[name="peso_neto"]').value = "";
-
-      // Habilitar campos de selección
-      document.getElementById("search-vehiculo").disabled = false;
-      document.getElementById("search-chofer").disabled = false;
-      document.getElementById("search-producto").disabled = false;
-
-      // Configurar botones de peso según proceso
       if (type === "Entrada") {
-        // Entrada: Se pesa Bruto (Lleno). Tara se bloquea (se tomará al salir)
         btnBruto.disabled = false;
         btnTara.disabled = true;
         inputBruto.placeholder = "Capturar...";
-        inputTara.placeholder = "Pendiente (Salida)";
+        inputTara.placeholder = "(Pendiente)";
       } else {
-        // Salida: El camión entra Vacío (Tara) para cargar. Se pesa Tara.
         btnBruto.disabled = true;
         btnTara.disabled = false;
-        inputBruto.placeholder = "Pendiente (Salida)";
+        inputBruto.placeholder = "(Pendiente)";
         inputTara.placeholder = "Capturar...";
       }
     };
 
-    // 2. Completar Ticket Existente
     const openCompleteModal = (ticket) => {
-      toggleModal(true);
       currentMode = "complete";
-      document.getElementById("modal-title").textContent =
-        "Finalizar Ticket (Segundo Pesaje)";
+      toggleModal(true);
+      document.getElementById("modal-title").textContent = "Finalizar Ticket";
 
-      // Rellenar datos
       form.querySelector('[name="id"]').value = ticket.id;
       form.querySelector('[name="nro_ticket"]').value = ticket.nro_ticket;
-      form.querySelector('[name="tipo_proceso"]').value = ticket.tipo_proceso;
+      form.querySelector('[name="tipo_proceso"]').value = ticket.tipo;
       form.querySelector('[name="id_usuario"]').value = ticket.id_usuario;
 
-      // Rellenar visuales de búsqueda
-      const v = vehiclesList.find((i) => i.id == ticket.id_vehiculo);
-      document.getElementById("search-vehiculo").value = v
-        ? `${v.placa} - ${v.descripcion || ""}`
-        : "";
-      form.querySelector('[name="id_vehiculo"]').value = ticket.id_vehiculo;
+      // --- RESOLVER IDS DE ASIGNACION (Para mostrarlos en inputs visuales) ---
+      const asignacion = listData.asignaciones.find(
+        (a) => a.id == ticket.id_asignaciones,
+      );
 
-      const c = driversList.find((i) => i.id == ticket.id_chofer);
-      document.getElementById("search-chofer").value = c
-        ? `${c.info?.cedula || c.cedula} - ${c.info?.nombre || c.nombre}`
-        : "";
-      form.querySelector('[name="id_chofer"]').value = ticket.id_chofer;
+      if (asignacion) {
+        // Llenar campos hidden con los IDs reales para mantener integridad (aunque no se usan para update de peso)
+        form.querySelector('[name="id_vehiculo"]').value =
+          asignacion.id_vehiculos;
+        form.querySelector('[name="id_chofer"]').value = asignacion.id_chofer;
 
-      const p = productsList.find((i) => i.id == ticket.id_producto);
-      document.getElementById("search-producto").value = p
-        ? `${p.codigo} - ${p.nombre}`
-        : "";
+        // Mostrar nombres en inputs visuales
+        const v = listData.vehiculos.find(
+          (x) => x.id == asignacion.id_vehiculos,
+        );
+        if (v)
+          document.getElementById("search-id_vehiculo").value =
+            getDisplayLabel(v);
+
+        const c = listData.choferes.find((x) => x.id == asignacion.id_chofer);
+        if (c)
+          document.getElementById("search-id_chofer").value =
+            getDisplayLabel(c);
+      } else {
+        console.warn(
+          "No main assignment found for ticket " + ticket.nro_ticket,
+        );
+      }
+
       form.querySelector('[name="id_producto"]').value = ticket.id_producto;
+      form.querySelector('[name="id_origen"]').value = ticket.id_origen;
+      form.querySelector('[name="id_destino"]').value = ticket.id_destino;
 
-      form.querySelector('[name="cantidad_cestas"]').value =
-        ticket.cantidad_cestas;
-      form.querySelector('[name="peso_avisado"]').value = ticket.peso_avisado;
+      // Fill Visual Inputs Normales
+      const p = listData.productos.find((x) => x.id == ticket.id_producto);
+      if (p)
+        document.getElementById("search-id_producto").value =
+          getDisplayLabel(p);
+
+      if (ticket.id_origen)
+        document.getElementById("select-origen").value = ticket.id_origen;
+      if (ticket.id_destino)
+        document.getElementById("select-destino").value = ticket.id_destino;
 
       inputBruto.value = ticket.peso_bruto || "";
       inputTara.value = ticket.peso_tara || "";
-      inputNeto.value = ticket.peso_neto || "";
+      calculateNeto();
 
-      // Bloquear edición de datos maestros (vehiculo, chofer...) en el cierre
-      document.getElementById("search-vehiculo").disabled = true;
-      document.getElementById("search-chofer").disabled = true;
-      document.getElementById("search-producto").disabled = true;
+      toggleFields(false); // Readonly
 
-      // Lógica de Pesas para COMPLETAR
-      // Si ya tiene Bruto, falta Tara. Si ya tiene Tara, falta Bruto.
       if (ticket.peso_bruto > 0) {
-        btnBruto.disabled = true; // Ya pesó
-        btnTara.disabled = false; // Toca pesar Tara (Salida vacío)
+        btnBruto.disabled = true;
+        btnTara.disabled = false;
       } else {
-        btnBruto.disabled = false; // Toca pesar Bruto (Salida Lleno)
-        btnTara.disabled = true; // Ya pesó
+        btnBruto.disabled = false;
+        btnTara.disabled = true;
       }
     };
 
-    // Listeners SearchInputs (para rellenar Inputs Hidden)
-    const setupSearchListener = (
-      searchId,
-      listId,
-      hiddenName,
-      listData,
-      labelFn,
-    ) => {
-      document.getElementById(searchId).addEventListener("input", (e) => {
-        const val = e.target.value;
-        const hidden = form.querySelector(`[name="${hiddenName}"]`);
-        const item = listData.find((i) => labelFn(i) === val);
-        hidden.value = item ? item.id : "";
-      });
-    };
-
-    // --- GUARDAR ---
+    // --- SUBMIT ---
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      setError("");
-
-      const formData = new FormData(form);
-      const data = Object.fromEntries(formData.entries());
-
-      // Capturamos el ID explícitamente antes de cualquier limpieza
-      const ticketId = data.id;
-
-      // Elimina nro_ticket si existe (el backend lo asigna)
-      delete data.nro_ticket;
-      delete data.id;
-      console.log("Form data to save:", data);
-
-      // Convierte todos los campos que sean IDs a enteros si existen
-      ["id_vehiculo", "id_chofer", "id_producto", "id_usuario"].forEach(
-        (key) => {
-          if (data[key]) data[key] = parseInt(data[key], 10);
-        },
-      );
-
-      // Conversión de tipos para otros campos numéricos
+      const fd = new FormData(form);
+      const data = Object.fromEntries(fd.entries());
+      [
+        "id",
+        "id_vehiculo",
+        "id_chofer",
+        "id_producto",
+        "id_usuario",
+        "id_origen",
+        "id_destino",
+      ].forEach((k) => {
+        if (data[k]) data[k] = parseInt(data[k]);
+      });
       data.peso_bruto = parseFloat(data.peso_bruto) || 0;
       data.peso_tara = parseFloat(data.peso_tara) || 0;
-      data.peso_neto = parseFloat(data.peso_neto) || 0;
-      data.cantidad_cestas = parseFloat(data.cantidad_cestas) || 0;
-      data.peso_avisado = parseFloat(data.peso_avisado) || 0;
-
-      // Validación Básica
-      if (!data.id_vehiculo || !data.id_chofer || !data.id_producto) {
-        alert("Debe seleccionar Vehículo, Chofer y Producto.");
-        return;
-      }
-
-      // Determinar Estado
-      if (data.peso_bruto > 0 && data.peso_tara > 0) {
-        data.estado = "Finalizado";
-      } else {
-        data.estado = "En Proceso";
-      }
 
       try {
         if (currentMode === "create") {
+          if (
+            !data.id_vehiculo ||
+            !data.id_chofer ||
+            !data.id_origen ||
+            !data.id_destino
+          ) {
+            alert("Complete todos los campos obligatorios.");
+            return;
+          }
+          if (data.peso_bruto <= 0 && data.peso_tara <= 0) {
+            alert("Capture un peso.");
+            return;
+          }
           await createResource("tickets_pesaje", data);
-          alert("Ticket Creado y puesto En Espera.");
+          alert("Ticket Creado!");
         } else {
-          if (data.estado !== "Finalizado") {
-            if (
-              !confirm(
-                "Advertencia: Aún falta un peso. ¿Guardar sin finalizar?",
-              )
-            )
-              return;
+          const ticketId = data.id;
+          let tipoPeso = "";
+          let peso = 0;
+          const original = pendingTickets.find((t) => t.id == ticketId);
+          if (original) {
+            if (!original.peso_bruto && data.peso_bruto > 0) {
+              tipoPeso = "bruto";
+              peso = data.peso_bruto;
+            } else if (!original.peso_tara && data.peso_tara > 0) {
+              tipoPeso = "tara";
+              peso = data.peso_tara;
+            }
           }
-
-          if (!ticketId) {
-            throw new Error("No se encontró el ID del ticket para actualizar.");
+          if (!peso) {
+            alert("Capture el peso faltante.");
+            return;
           }
-
-          // Nota: data.id ya fue borrado arriba, por seguridad nos aseguramos
-          delete data.id;
-
-          await updateResource("tickets_pesaje", ticketId, data);
-
-          if (data.estado === "Finalizado")
-            alert("Ticket FINALIZADO correctamente.");
+          await api.post("/tickets_pesaje/registrar_peso", {
+            id: ticketId,
+            tipo_peso: tipoPeso,
+            peso: peso,
+          });
+          alert("Ticket Finalizado!");
         }
         toggleModal(false);
         loadPendingTickets();
       } catch (err) {
         console.error(err);
-        alert(
-          "Error al guardar: " + (err.response?.data?.error || err.message),
-        );
+        alert("Error: " + (err.response?.data?.error || err.message));
       }
     });
 
-    // Listeners Botones Principales
-    document
-      .getElementById("btn-entrada")
-      .addEventListener("click", () => openCreateModal("Entrada"));
-    document
-      .getElementById("btn-salida")
-      .addEventListener("click", () => openCreateModal("Salida"));
-    document
-      .getElementById("btn-cancel")
-      .addEventListener("click", () => toggleModal(false));
+    // --- EVENTS ---
+    document.getElementById("btn-entrada").onclick = () =>
+      openCreateModal("Entrada");
+    document.getElementById("btn-salida").onclick = () =>
+      openCreateModal("Salida");
+    document.getElementById("btn-close-x").onclick = () => toggleModal(false);
+    document.getElementById("btn-cancel").onclick = () => toggleModal(false);
+    overlay.onclick = (e) => {
+      if (e.target === overlay) toggleModal(false);
+    };
 
-    // Init
+    // INIT
     loadLists().then(() => {
       setupSearchListener(
-        "search-vehiculo",
-        "list-vehiculos",
+        "search-id_vehiculo",
         "id_vehiculo",
-        vehiclesList,
-        (i) => `${i.placa} - ${i.descripcion || ""}`,
+        listData.vehiculos,
       );
+      setupSearchListener("search-id_chofer", "id_chofer", listData.choferes);
       setupSearchListener(
-        "search-chofer",
-        "list-choferes",
-        "id_chofer",
-        driversList,
-        (i) => `${i.info?.cedula || i.cedula} - ${i.info?.nombre || i.nombre}`,
-      );
-      setupSearchListener(
-        "search-producto",
-        "list-productos",
+        "search-id_producto",
         "id_producto",
-        productsList,
-        (i) => `${i.codigo} - ${i.nombre}`,
+        listData.productos,
       );
       loadPendingTickets();
     });

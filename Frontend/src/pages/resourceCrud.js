@@ -84,7 +84,7 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
     if (f.captureWeight) {
       addonButton = `<button type="button" class="weigh-capture-btn" data-target="${f.name}" style="margin-left:8px;" disabled>⚖️</button>`;
     }
-
+    if (f.name === "codigo" && resource === "productos") return ""; // Ocultar campo código en productos (se genera automáticamente){
     if (f.name === "created_at" || f.hidden) return "";
 
     // FK Field con botón (+)
@@ -462,12 +462,16 @@ export const createCrudPage = ({ title, resource, fields, pageSize = 50 }) => {
             } else {
               const el = form.querySelector(`[name="${f.name}"]`);
               if (!el) return;
-              if (el.tagName === "SELECT" && el.dataset.enumKey) {
-                // Asegura que el valor se seleccione incluso si se carga asíncrono
-                el.value = item[f.name];
+
+              // --- CORRECCIÓN: Leer valores del DOM hacia data (antes intentaba asignar usando 'item') ---
+              if (el.type === "checkbox") {
+                data[f.name] = el.checked;
+              } else if (f.type === "number" || el.type === "number") {
+                data[f.name] = el.value ? parseFloat(el.value) : null;
+              } else {
+                data[f.name] = el.value;
               }
-              if (el.type === "checkbox") el.checked = item[f.name];
-              else el.value = item[f.name];
+              // -----------------------------------------------------------------------------------------
             }
           });
 

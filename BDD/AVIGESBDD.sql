@@ -9,11 +9,21 @@ GO
 
 CREATE TABLE [Direcciones] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
-  [pais] varchar(100) NOT NULL,
+  [pais] varchar(100) NOT NULL DEFAULT 'Venezuela',
   [estado] varchar(100) NOT NULL,
   [municipio] varchar(100) NOT NULL,
   [sector] varchar(100) NOT NULL,
   [descripcion] varchar(MAX),
+  [is_deleted] bit NOT NULL DEFAULT (0),
+  [created_at] datetime NOT NULL DEFAULT (getdate())
+)
+GO
+
+CREATE TABLE [Empresas_transportes] (
+  [id] integer PRIMARY KEY IDENTITY(1, 1),
+  [id_direcciones] integer NOT NULL,
+  [rif] varchar(20) UNIQUE NOT NULL,
+  [nombre] varchar(100) NOT NULL,
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
 )
@@ -30,11 +40,48 @@ CREATE TABLE [Personas] (
 )
 GO
 
+CREATE TABLE [Personas_direcciones] (
+  id integer PRIMARY KEY IDENTITY(1, 1),
+  id_personas integer NOT NULL,
+  id_direcciones integer NOT NULL,
+  is_deleted bit NOT NULL DEFAULT (0),
+  created_at datetime NOT NULL DEFAULT (getdate())
+)
+GO
+
+CREATE TABLE [Empresas_direcciones] (
+  id integer PRIMARY KEY IDENTITY(1, 1),
+  id_empresas_transportes integer NOT NULL,
+  id_direcciones integer NOT NULL,
+  is_deleted bit NOT NULL DEFAULT (0),
+  created_at datetime NOT NULL DEFAULT (getdate())
+)
+GO
+
 CREATE TABLE [Telefonos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
-  [id_personas] integer NULL,
+  [codigo_pais] varchar(10) NULL DEFAULT '+58',
+  [operadora] varchar(50) NOT NULL,
   [numero] varchar(20) NOT NULL,
   [tipo] nvarchar(255) NOT NULL CHECK ([tipo] IN ('Celular', 'Casa', 'Trabajo')),
+  [is_deleted] bit NOT NULL DEFAULT (0),
+  [created_at] datetime NOT NULL DEFAULT (getdate())
+)
+GO
+
+CREATE TABLE [Personas_telefonos] (
+  [id] integer PRIMARY KEY IDENTITY(1, 1),
+  [id_personas] integer NOT NULL,
+  [id_telefonos] integer NOT NULL,
+  [is_deleted] bit NOT NULL DEFAULT (0),
+  [created_at] datetime NOT NULL DEFAULT (getdate())
+)
+GO
+
+CREATE TABLE [Empresas_telefonos] (
+  [id] integer PRIMARY KEY IDENTITY(1, 1),
+  [id_empresas_transportes] integer NOT NULL,
+  [id_telefonos] integer NOT NULL,
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
 )
@@ -71,16 +118,6 @@ GO
 CREATE TABLE [Productos] (
   [id] integer PRIMARY KEY IDENTITY(1, 1),
   [codigo] varchar(50) UNIQUE NOT NULL,
-  [nombre] varchar(100) NOT NULL,
-  [is_deleted] bit NOT NULL DEFAULT (0),
-  [created_at] datetime NOT NULL DEFAULT (getdate())
-)
-GO
-
-CREATE TABLE [Empresas_transportes] (
-  [id] integer PRIMARY KEY IDENTITY(1, 1),
-  [id_direcciones] integer NOT NULL,
-  [rif] varchar(20) UNIQUE NOT NULL,
   [nombre] varchar(100) NOT NULL,
   [is_deleted] bit NOT NULL DEFAULT (0),
   [created_at] datetime NOT NULL DEFAULT (getdate())
@@ -245,7 +282,28 @@ EXEC sp_addextendedproperty
 @level2type = N'Column', @level2name = 'aves_faltantes';
 GO
 
-ALTER TABLE [Telefonos] ADD FOREIGN KEY ([id_personas]) REFERENCES [Personas] ([id])
+ALTER TABLE [Personas_direcciones] ADD FOREIGN KEY ([id_personas]) REFERENCES [Personas] ([id])
+GO
+
+ALTER TABLE [Personas_direcciones] ADD FOREIGN KEY ([id_direcciones]) REFERENCES [Direcciones] ([id])
+GO
+
+ALTER TABLE [Empresas_direcciones] ADD FOREIGN KEY ([id_empresas_transportes]) REFERENCES [Empresas_transportes] ([id])
+GO
+
+ALTER TABLE [Empresas_direcciones] ADD FOREIGN KEY ([id_direcciones]) REFERENCES [Direcciones] ([id])
+GO
+
+ALTER TABLE [Personas_telefonos] ADD FOREIGN KEY ([id_personas]) REFERENCES [Personas] ([id])
+GO
+
+ALTER TABLE [Personas_telefonos] ADD FOREIGN KEY ([id_telefonos]) REFERENCES [Telefonos] ([id])
+GO
+
+ALTER TABLE [Empresas_telefonos] ADD FOREIGN KEY ([id_empresas_transportes]) REFERENCES [Empresas_transportes] ([id])
+GO
+
+ALTER TABLE [Empresas_telefonos] ADD FOREIGN KEY ([id_telefonos]) REFERENCES [Telefonos] ([id])
 GO
 
 ALTER TABLE [Personas] ADD FOREIGN KEY ([id_direcciones]) REFERENCES [Direcciones] ([id])
