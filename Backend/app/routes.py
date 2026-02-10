@@ -567,7 +567,6 @@ def create_ticket_pesaje():
             if not nom_prod: return jsonify({"error": "id_producto o producto_nombre requeridos"}), 400
             
             # Crear producto basico
-            import uuid
             new_code = f"P-{uuid.uuid4().hex[:6].upper()}"
             prod = Productos(nombre=nom_prod, codigo=new_code)
             db.session.add(prod)
