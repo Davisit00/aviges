@@ -289,6 +289,43 @@ def logout():
     jwt_blocklist.add(jti)
     return jsonify({"logged_out": True})
 
+@api_bp.route("/auth/validate_admin", methods=["POST"])
+@jwt_required()
+def validate_admin_credentials():
+    """
+    Validates admin credentials for romanero users who need admin approval for updates.
+    Expects: {"usuario": "admin_username", "contrasena": "admin_password"}
+    Returns: {"valid": True/False, "is_admin": True/False}
+    """
+    data = request.get_json(force=True) or {}
+    usuario = data.get("usuario")
+    contrasena = data.get("contrasena")
+    
+    if not usuario or not contrasena:
+        return jsonify({"error": "usuario y contrasena son requeridos"}), 400
+    
+    user = Usuarios.query.filter_by(usuario=usuario, is_deleted=False).first()
+    if not user:
+        return jsonify({"valid": False, "is_admin": False, "error": "Usuario no encontrado"}), 200
+    
+    if not check_password_hash(user.contraseña, contrasena):
+        return jsonify({"valid": False, "is_admin": False, "error": "Contraseña incorrecta"}), 200
+    
+    # Check if user is admin (role 1)
+    is_admin = user.id_roles == 1
+    
+    return jsonify({"valid": True, "is_admin": is_admin}), 200
+
+@api_bp.route("/usuarios/me", methods=["GET"])
+@jwt_required()
+def get_current_user():
+    """Get current logged in user information"""
+    current_user_id = get_jwt_identity()
+    user = Usuarios.query.get(current_user_id)
+    if not user:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+    return jsonify(serialize(user)), 200
+
 
 # ---------- COMBINED ENDPOINTS (Heavy Logic Here) ----------
 
