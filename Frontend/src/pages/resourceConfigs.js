@@ -7,7 +7,7 @@ export const resourceConfigs = {
       { name: "pais", label: "País", defaultValue: "Venezuela" },
       { name: "estado", label: "Estado", required: true },
       { name: "municipio", label: "Municipio", required: true },
-      { name: "sector", label: "Sector" },
+      { name: "sector", label: "Sector", required: true },
       { name: "descripcion", label: "Punto de Referencia" }, // descripción en BD
     ],
   },
@@ -15,7 +15,14 @@ export const resourceConfigs = {
     title: "Gestión de Personas",
     resource: "personas",
     fields: [
-      { name: "cedula", label: "Cédula", required: true },
+      { 
+        name: "tipo_cedula", 
+        label: "Tipo de Cédula", 
+        type: "select",
+        enumKey: "cedula_tipo",
+        required: true 
+      },
+      { name: "cedula", label: "Número de Cédula", required: true },
       { name: "nombre", label: "Nombre", required: true },
       { name: "apellido", label: "Apellido", required: true },
       { name: "id_direcciones", label: "Dirección", required: true },
@@ -29,6 +36,7 @@ export const resourceConfigs = {
     resource: "telefonos",
     fields: [
       { name: "numero", label: "Número Telefónico", required: true },
+      { name: "operadora", label: "Operadora", defaultValue: "Desconocida" },
       {
         name: "tipo",
         label: "Tipo",
@@ -36,6 +44,20 @@ export const resourceConfigs = {
         enumKey: "telefonos_tipo",
         required: true,
       },
+    ],
+  },
+  rif: {
+    title: "Crear RIF",
+    resource: "rif",
+    fields: [
+      { 
+        name: "tipo", 
+        label: "Tipo de RIF", 
+        type: "select",
+        enumKey: "rif_tipo",
+        required: true 
+      },
+      { name: "numero", label: "Número de RIF", required: true },
     ],
   },
   roles: {
@@ -48,7 +70,13 @@ export const resourceConfigs = {
     resource: "ubicaciones",
     fields: [
       { name: "nombre", label: "Nombre del Sitio", required: true },
-      { name: "tipo", label: "Tipo (Granja/Matadero/Etc)", required: true },
+      { 
+        name: "tipo", 
+        label: "Tipo de Ubicación", 
+        type: "select",
+        enumKey: "ubicaciones_tipo",
+        required: true 
+      },
       { name: "id_direcciones", label: "Dirección Física", required: true },
     ],
   },
@@ -174,8 +202,14 @@ export const resourceConfigs = {
     title: "Tickets de Pesaje (Histórico)",
     resource: "tickets_pesaje",
     fields: [
-      { name: "nro_ticket", label: "Nro Ticket" },
-      { name: "tipo", label: "Tipo Operación" },
+      { name: "nro_ticket", label: "Nro Ticket", readOnly: true },
+      { 
+        name: "tipo", 
+        label: "Tipo Operación",
+        type: "select",
+        enumKey: "tickets_tipo",
+        required: true
+      },
       // Muestra relación compleja
       { name: "id_asignaciones", label: "Asignación (Veh/Chofer)" },
       { name: "id_producto", label: "Producto" },
@@ -191,7 +225,13 @@ export const resourceConfigs = {
       { name: "peso_tara", label: "Tara (kg)", type: "number", readOnly: true },
       { name: "peso_neto", label: "Neto (kg)", type: "number", readOnly: true },
 
-      { name: "estado", label: "Estado", readOnly: true },
+      { 
+        name: "estado", 
+        label: "Estado",
+        type: "select",
+        enumKey: "tickets_estado",
+        readOnly: true 
+      },
       { name: "created_at", label: "Fecha Registro", readOnly: true },
     ],
   },
