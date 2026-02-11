@@ -1,8 +1,8 @@
 """Migracion Inicial Completa
 
-Revision ID: e3eaa2ef31f4
+Revision ID: 6fedc9c50786
 Revises: 
-Create Date: 2026-02-10 14:19:30.214681
+Create Date: 2026-02-11 13:40:58.880026
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'e3eaa2ef31f4'
+revision = '6fedc9c50786'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -35,9 +35,11 @@ def upgrade():
     sa.Column('codigo', sa.String(length=50), nullable=False),
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Productos')),
-    sa.UniqueConstraint('codigo', name=op.f('uq_Productos_codigo'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_Productos'))
     )
+    with op.batch_alter_table('Productos', schema=None) as batch_op:
+        batch_op.create_index('idx_productos_codigo_unique_active', ['codigo'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('RIF',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('tipo', sa.String(length=1), nullable=False),
@@ -45,9 +47,11 @@ def upgrade():
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.CheckConstraint("tipo IN ('J', 'G', 'V', 'E')", name=op.f('ck_RIF_ck_rif_tipo')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_RIF')),
-    sa.UniqueConstraint('numero', name=op.f('uq_RIF_numero'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_RIF'))
     )
+    with op.batch_alter_table('RIF', schema=None) as batch_op:
+        batch_op.create_index('idx_rif_numero_unique_active', ['numero'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('Roles',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('nombre', sa.String(length=50), nullable=False),
@@ -70,11 +74,16 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_direcciones', sa.Integer(), nullable=False),
     sa.Column('nombre', sa.String(length=100), nullable=False),
+    sa.Column('id_rif', sa.Integer(), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.ForeignKeyConstraint(['id_direcciones'], ['Direcciones.id'], name=op.f('fk_Empresas_transportes_id_direcciones_Direcciones')),
+    sa.ForeignKeyConstraint(['id_rif'], ['RIF.id'], name=op.f('fk_Empresas_transportes_id_rif_RIF')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_Empresas_transportes'))
     )
+    with op.batch_alter_table('Empresas_transportes', schema=None) as batch_op:
+        batch_op.create_index('idx_empresas_rif_unique_active', ['id_rif'], unique=True, mssql_where=sa.text('is_deleted = 0 AND id_rif IS NOT NULL'))
+
     op.create_table('Personas',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_direcciones', sa.Integer(), nullable=False),
@@ -86,9 +95,11 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.CheckConstraint("tipo_cedula IN ('V', 'E')", name=op.f('ck_Personas_ck_personas_tipo_cedula')),
     sa.ForeignKeyConstraint(['id_direcciones'], ['Direcciones.id'], name=op.f('fk_Personas_id_direcciones_Direcciones')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Personas')),
-    sa.UniqueConstraint('cedula', name=op.f('uq_Personas_cedula'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_Personas'))
     )
+    with op.batch_alter_table('Personas', schema=None) as batch_op:
+        batch_op.create_index('idx_personas_cedula_unique_active', ['cedula'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('Ubicaciones',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_direcciones', sa.Integer(), nullable=False),
@@ -110,19 +121,6 @@ def upgrade():
     sa.ForeignKeyConstraint(['id_personas'], ['Personas.id'], name=op.f('fk_Choferes_id_personas_Personas')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_Choferes'))
     )
-    op.create_table('Empresas_RIF',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('id_empresas_transportes', sa.Integer(), nullable=False),
-    sa.Column('id_rif', sa.Integer(), nullable=False),
-    sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
-    sa.ForeignKeyConstraint(['id_empresas_transportes'], ['Empresas_transportes.id'], name=op.f('fk_Empresas_RIF_id_empresas_transportes_Empresas_transportes')),
-    sa.ForeignKeyConstraint(['id_rif'], ['RIF.id'], name=op.f('fk_Empresas_RIF_id_rif_RIF')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Empresas_RIF'))
-    )
-    with op.batch_alter_table('Empresas_RIF', schema=None) as batch_op:
-        batch_op.create_index('idx_empresas_rif_unique_active', ['id_rif'], unique=True, mssql_where=sa.text('is_deleted = 0'))
-
     op.create_table('Empresas_direcciones',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_empresas_transportes', sa.Integer(), nullable=False),
@@ -150,12 +148,17 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_ubicaciones', sa.Integer(), nullable=False),
     sa.Column('id_persona_responsable', sa.Integer(), nullable=False),
+    sa.Column('id_rif', sa.Integer(), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.ForeignKeyConstraint(['id_persona_responsable'], ['Personas.id'], name=op.f('fk_Granjas_id_persona_responsable_Personas')),
+    sa.ForeignKeyConstraint(['id_rif'], ['RIF.id'], name=op.f('fk_Granjas_id_rif_RIF')),
     sa.ForeignKeyConstraint(['id_ubicaciones'], ['Ubicaciones.id'], name=op.f('fk_Granjas_id_ubicaciones_Ubicaciones')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_Granjas'))
     )
+    with op.batch_alter_table('Granjas', schema=None) as batch_op:
+        batch_op.create_index('idx_granjas_rif_unique_active', ['id_rif'], unique=True, mssql_where=sa.text('is_deleted = 0 AND id_rif IS NOT NULL'))
+
     op.create_table('Personas_direcciones',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_personas', sa.Integer(), nullable=False),
@@ -189,9 +192,11 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.ForeignKeyConstraint(['id_personas'], ['Personas.id'], name=op.f('fk_Usuarios_id_personas_Personas')),
     sa.ForeignKeyConstraint(['id_roles'], ['Roles.id'], name=op.f('fk_Usuarios_id_roles_Roles')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Usuarios')),
-    sa.UniqueConstraint('usuario', name=op.f('uq_Usuarios_usuario'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_Usuarios'))
     )
+    with op.batch_alter_table('Usuarios', schema=None) as batch_op:
+        batch_op.create_index('idx_usuarios_usuario_unique_active', ['usuario'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('Vehiculos',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('placa', sa.String(length=20), nullable=False),
@@ -199,9 +204,11 @@ def upgrade():
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.ForeignKeyConstraint(['id_empresas_transportes'], ['Empresas_transportes.id'], name=op.f('fk_Vehiculos_id_empresas_transportes_Empresas_transportes')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Vehiculos')),
-    sa.UniqueConstraint('placa', name=op.f('uq_Vehiculos_placa'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_Vehiculos'))
     )
+    with op.batch_alter_table('Vehiculos', schema=None) as batch_op:
+        batch_op.create_index('idx_vehiculos_placa_unique_active', ['placa'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('Asignaciones',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_vehiculos', sa.Integer(), nullable=False),
@@ -225,19 +232,6 @@ def upgrade():
     sa.ForeignKeyConstraint(['id_granja'], ['Granjas.id'], name=op.f('fk_Galpones_id_granja_Granjas')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_Galpones'))
     )
-    op.create_table('Granjas_RIF',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('id_granjas', sa.Integer(), nullable=False),
-    sa.Column('id_rif', sa.Integer(), nullable=False),
-    sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
-    sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
-    sa.ForeignKeyConstraint(['id_granjas'], ['Granjas.id'], name=op.f('fk_Granjas_RIF_id_granjas_Granjas')),
-    sa.ForeignKeyConstraint(['id_rif'], ['RIF.id'], name=op.f('fk_Granjas_RIF_id_rif_RIF')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Granjas_RIF'))
-    )
-    with op.batch_alter_table('Granjas_RIF', schema=None) as batch_op:
-        batch_op.create_index('idx_granjas_rif_unique_active', ['id_rif'], unique=True, mssql_where=sa.text('is_deleted = 0'))
-
     op.create_table('Granjas_telefonos',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_granjas', sa.Integer(), nullable=False),
@@ -288,9 +282,11 @@ def upgrade():
     sa.ForeignKeyConstraint(['id_producto'], ['Productos.id'], name=op.f('fk_Ticket_pesaje_id_producto_Productos')),
     sa.ForeignKeyConstraint(['id_usuarios_primer_peso'], ['Usuarios.id'], name=op.f('fk_Ticket_pesaje_id_usuarios_primer_peso_Usuarios')),
     sa.ForeignKeyConstraint(['id_usuarios_segundo_peso'], ['Usuarios.id'], name=op.f('fk_Ticket_pesaje_id_usuarios_segundo_peso_Usuarios')),
-    sa.PrimaryKeyConstraint('id', name=op.f('pk_Ticket_pesaje')),
-    sa.UniqueConstraint('nro_ticket', name=op.f('uq_Ticket_pesaje_nro_ticket'))
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_Ticket_pesaje'))
     )
+    with op.batch_alter_table('Ticket_pesaje', schema=None) as batch_op:
+        batch_op.create_index('idx_ticket_pesaje_nro_ticket_unique_active', ['nro_ticket'], unique=True, mssql_where=sa.text('is_deleted = 0'))
+
     op.create_table('Estadisticas',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_ticket', sa.Integer(), nullable=False),
@@ -353,42 +349,58 @@ def downgrade():
     op.drop_table('Viajes_origen')
     op.drop_table('Viajes_conteos')
     op.drop_table('Estadisticas')
+    with op.batch_alter_table('Ticket_pesaje', schema=None) as batch_op:
+        batch_op.drop_index('idx_ticket_pesaje_nro_ticket_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('Ticket_pesaje')
     op.drop_table('Lotes')
     with op.batch_alter_table('Granjas_telefonos', schema=None) as batch_op:
         batch_op.drop_index('idx_granjas_telefonos_unique_active', mssql_where=sa.text('is_deleted = 0'))
 
     op.drop_table('Granjas_telefonos')
-    with op.batch_alter_table('Granjas_RIF', schema=None) as batch_op:
-        batch_op.drop_index('idx_granjas_rif_unique_active', mssql_where=sa.text('is_deleted = 0'))
-
-    op.drop_table('Granjas_RIF')
     op.drop_table('Galpones')
     op.drop_table('Asignaciones')
+    with op.batch_alter_table('Vehiculos', schema=None) as batch_op:
+        batch_op.drop_index('idx_vehiculos_placa_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('Vehiculos')
+    with op.batch_alter_table('Usuarios', schema=None) as batch_op:
+        batch_op.drop_index('idx_usuarios_usuario_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('Usuarios')
     with op.batch_alter_table('Personas_telefonos', schema=None) as batch_op:
         batch_op.drop_index('idx_personas_telefonos_unique_active', mssql_where=sa.text('is_deleted = 0'))
 
     op.drop_table('Personas_telefonos')
     op.drop_table('Personas_direcciones')
+    with op.batch_alter_table('Granjas', schema=None) as batch_op:
+        batch_op.drop_index('idx_granjas_rif_unique_active', mssql_where=sa.text('is_deleted = 0 AND id_rif IS NOT NULL'))
+
     op.drop_table('Granjas')
     with op.batch_alter_table('Empresas_telefonos', schema=None) as batch_op:
         batch_op.drop_index('idx_empresas_telefonos_unique_active', mssql_where=sa.text('is_deleted = 0'))
 
     op.drop_table('Empresas_telefonos')
     op.drop_table('Empresas_direcciones')
-    with op.batch_alter_table('Empresas_RIF', schema=None) as batch_op:
-        batch_op.drop_index('idx_empresas_rif_unique_active', mssql_where=sa.text('is_deleted = 0'))
-
-    op.drop_table('Empresas_RIF')
     op.drop_table('Choferes')
     op.drop_table('Ubicaciones')
+    with op.batch_alter_table('Personas', schema=None) as batch_op:
+        batch_op.drop_index('idx_personas_cedula_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('Personas')
+    with op.batch_alter_table('Empresas_transportes', schema=None) as batch_op:
+        batch_op.drop_index('idx_empresas_rif_unique_active', mssql_where=sa.text('is_deleted = 0 AND id_rif IS NOT NULL'))
+
     op.drop_table('Empresas_transportes')
     op.drop_table('Telefonos')
     op.drop_table('Roles')
+    with op.batch_alter_table('RIF', schema=None) as batch_op:
+        batch_op.drop_index('idx_rif_numero_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('RIF')
+    with op.batch_alter_table('Productos', schema=None) as batch_op:
+        batch_op.drop_index('idx_productos_codigo_unique_active', mssql_where=sa.text('is_deleted = 0'))
+
     op.drop_table('Productos')
     op.drop_table('Direcciones')
     # ### end Alembic commands ###

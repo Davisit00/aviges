@@ -14,8 +14,8 @@ from .models import (
     ViajesOrigen, Estadisticas, RIF,
     # Tablas intermedias
     PersonasTelefonos, PersonasDirecciones, 
-    EmpresasDirecciones, EmpresasTelefonos, EmpresasRIF,
-    GranjasTelefonos, GranjasRIF
+    EmpresasDirecciones, EmpresasTelefonos,
+    GranjasTelefonos
 )
 from .services.crud import CRUDService
 from .services.validation import validate_payload
@@ -113,13 +113,23 @@ class TransactionHelper:
         # Caso 1: ID existente
         if "id" in data:
             telefono = Telefonos.query.get(data["id"])
+            # SI el teléfono existía pero estaba borrado, lo reactivamos al usarlo de nuevo
+            if telefono and telefono.is_deleted:
+                telefono.is_deleted = False
         
         # Caso 2: Numero y Datos
         elif "numero" in data:
             num = data["numero"]
+            # Buscamos incluso los borrados
             telefono = Telefonos.query.filter_by(numero=num).first()
             
-            if not telefono:
+            if telefono:
+                # Si existe pero estaba borrado, lo reactivamos
+                if telefono.is_deleted:
+                    telefono.is_deleted = False
+                    # Actualizamos datos si vienen nuevos (opcional)
+                    if data.get("operadora"): telefono.operadora = data["operadora"]
+            else:
                 if not data.get("operadora"): data["operadora"] = "Desconocida"
                 if not data.get("tipo"): data["tipo"] = "Celular"
                 telefono = Telefonos(**data)
@@ -143,19 +153,18 @@ class TransactionHelper:
 
         if existing_assoc:
             if not existing_assoc.is_deleted:
-                # Ya existe y está activo -> Error o Ignorar (depende de regla de negocio, user dice Error si esta asociado a OTRA persona, pero aqui verificamos al mismo owner)
-                # Verificamos si el telefono está asociado a OTRO owner activo?
-                # user logic: "si está registrado y asociado a otra persona enviar el error"
-                # Eso requeriría buscar en TODA la tabla de asociación por id_telefono
+                # Ya existe y está activo...
+                # Validamos si está asociado a OTRO owner activo diferente
+                # Ejemplo: Si id_personas=1 y viene id_personas=2
                 check_other = AssociationModel.query.filter_by(id_telefonos=telefono.id, is_deleted=False).filter(getattr(AssociationModel, owner_fk_field) != owner_id).first()
                 if check_other:
                     raise ValueError(f"El teléfono {telefono.numero} ya está asociado a otro registro activo.")
-                pass # Ya es mio y activo, todo bien
+                pass 
             else:
-                # Es mio pero estaba borrado -> Reactivar
+                # Es mio pero estaba borrado -> Reactivar asociación
                 existing_assoc.is_deleted = False
         else:
-            # Check si pertenece a otro antes de asociar
+            # Check si pertenece a otro antes de asociar (Global active check)
             check_other = AssociationModel.query.filter_by(id_telefonos=telefono.id, is_deleted=False).first()
             if check_other:
                  raise ValueError(f"El teléfono {telefono.numero} ya está asociado a otro registro.")
@@ -173,7 +182,12 @@ class TransactionHelper:
             rif_obj = RIF.query.get(data["id"])
         elif "numero" in data and "tipo" in data:
             rif_obj = RIF.query.filter_by(numero=data["numero"], tipo=data["tipo"]).first()
-            if not rif_obj:
+            
+            if rif_obj:
+                # Reactivar RIF si estaba borrado
+                if rif_obj.is_deleted:
+                    rif_obj.is_deleted = False
+            else:
                 rif_obj = RIF(**data)
                 db.session.add(rif_obj)
                 db.session.flush()

@@ -1,15 +1,4 @@
 import { logout, getUserInfo } from "../api.js"; // Asegurar importación de getUserInfo
-import { ProductsInterface } from "./products.js";
-import { UsuariosInterface } from "./usuarios.js";
-import { EmpresasTransporteInterface } from "./empresasTransporte.js";
-import { GranjasInterface } from "./granjas.js";
-import { GalponesInterface } from "./galpones.js";
-import { VehiculosInterface } from "./vehiculos.js";
-import { ChoferesInterface } from "./choferes.js";
-import { TicketsPesajeInterface } from "./ticketsPesaje.js";
-import { TicketsPesajePrintInterface } from "./ticketsPesajePrint.js";
-import { TicketsPesajeCrudInterface } from "./ticketsPesajeCrud.js";
-// IMPORTANTE: Importar la nueva interfaz
 import { WelcomeInterface } from "./welcome.js";
 
 // Variable global para almacenar el rol del usuario
@@ -19,81 +8,95 @@ let currentUserRole = null;
 const getPermissions = (resource) => {
   // Admin (Role 1): Full CRUD on everything
   if (currentUserRole === 1) {
-    return { 
-      canCreate: true, 
-      canEdit: true, 
+    return {
+      canCreate: true,
+      canEdit: true,
       canDelete: true,
-      requiresAdminForEdit: false
+      requiresAdminForEdit: false,
     };
   }
 
   // Romanero (Role 2): Complex permission matrix
   if (currentUserRole === 2) {
     // CR only: Asignaciones, Ubicaciones, Granjas, Galpones, Lotes
-    const crOnlyResources = ['asignaciones', 'ubicaciones', 'granjas', 'galpones', 'lotes'];
+    const crOnlyResources = [
+      "asignaciones",
+      "ubicaciones",
+      "granjas",
+      "galpones",
+      "lotes",
+    ];
     if (crOnlyResources.includes(resource)) {
       return {
         canCreate: true,
         canEdit: false,
         canDelete: false,
-        requiresAdminForEdit: false
+        requiresAdminForEdit: false,
       };
     }
 
-    // Update with admin credentials: Direcciones, Personas, Telefonos, Productos, 
+    // Update with admin credentials: Direcciones, Personas, Telefonos, Productos,
     // EmpresasTransporte, Vehiculos, Choferes, Viajes, RIF
     const adminCredentialResources = [
-      'direcciones', 'personas', 'telefonos', 'productos', 'rif',
-      'empresas_transporte', 'vehiculos', 'choferes',
-      'viajes_tiempos', 'viajes_conteos', 'viajes_origen'
+      "direcciones",
+      "personas",
+      "telefonos",
+      "productos",
+      "rif",
+      "empresas_transporte",
+      "vehiculos",
+      "choferes",
+      "viajes_tiempos",
+      "viajes_conteos",
+      "viajes_origen",
     ];
     if (adminCredentialResources.includes(resource)) {
       return {
         canCreate: true,
         canEdit: true,
         canDelete: false,
-        requiresAdminForEdit: true
+        requiresAdminForEdit: true,
       };
     }
 
     // TicketPesaje: Special case - can edit if not finalized
-    if (resource === 'tickets_pesaje') {
+    if (resource === "tickets_pesaje") {
       return {
         canCreate: true,
         canEdit: true, // Will check finalized status before edit
         canDelete: false,
         requiresAdminForEdit: false, // Will require if finalized
-        specialEditCheck: 'ticket_finalized'
+        specialEditCheck: "ticket_finalized",
       };
     }
 
     // Estadisticas: Read-only
-    if (resource === 'estadisticas') {
+    if (resource === "estadisticas") {
       return {
         canCreate: false,
         canEdit: false,
         canDelete: false,
-        readOnly: true
+        readOnly: true,
       };
     }
 
     // Roles, Usuarios: No access
-    if (resource === 'roles' || resource === 'usuarios') {
+    if (resource === "roles" || resource === "usuarios") {
       return {
         canCreate: false,
         canEdit: false,
         canDelete: false,
-        noAccess: true
+        noAccess: true,
       };
     }
   }
 
   // Default: No access
-  return { 
-    canCreate: false, 
-    canEdit: false, 
-    canDelete: false, 
-    readOnly: true 
+  return {
+    canCreate: false,
+    canEdit: false,
+    canDelete: false,
+    readOnly: true,
   };
 };
 
