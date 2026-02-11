@@ -771,9 +771,37 @@ def create_resource_generic(resource):
             data["codigo"] = f"P-{uuid.uuid4().hex[:6].upper()}"
 
     try:
+        # Procesar RIF para empresas_transporte y granjas
+        # El frontend puede enviar: id_rif (FK directo) o rif (objeto con tipo y numero)
+        rif_data = None
+        rif_id = data.pop("id_rif", None)
+        
+        if rif_id:
+            # Si se proporciona un ID de RIF existente, crear objeto de datos para process_rif
+            rif_data = {"id": rif_id}
+        else:
+            # Si se proporciona un objeto rif con tipo y numero
+            rif_data = data.pop("rif", None)
+        
         data.pop("id", None)
         obj = model(**data)
         db.session.add(obj)
+        db.session.flush()  # Get ID for RIF association
+        
+        # Si hay datos de RIF, crear la relación
+        if rif_data and resource == "empresas_transporte":
+            try:
+                TransactionHelper.process_rif(rif_data, obj.id, EmpresasRIF, "id_empresas_transportes")
+            except ValueError as e:
+                db.session.rollback()
+                return jsonify({"error": str(e)}), 409
+        elif rif_data and resource == "granjas":
+            try:
+                TransactionHelper.process_rif(rif_data, obj.id, GranjasRIF, "id_granjas")
+            except ValueError as e:
+                db.session.rollback()
+                return jsonify({"error": str(e)}), 409
+        
         db.session.commit()
         return jsonify(serialize(obj)), 201
     except Exception as e:
