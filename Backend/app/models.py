@@ -113,8 +113,14 @@ class EmpresasTransporte(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_direcciones = db.Column(db.Integer, db.ForeignKey("Direcciones.id"), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
+    id_rif = db.Column(db.Integer, db.ForeignKey("RIF.id"), nullable=True)  # 1:1 relationship with RIF
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
+    
+    __table_args__ = (
+        # Unique constraint for active RIF (allows reuse if soft deleted)
+        db.Index('idx_empresas_rif_unique_active', 'id_rif', unique=True, mssql_where=db.text('is_deleted = 0 AND id_rif IS NOT NULL')),
+    )
 
 class EmpresasDirecciones(db.Model):
     __tablename__ = "Empresas_direcciones"
@@ -138,6 +144,8 @@ class EmpresasTelefonos(db.Model):
         db.Index('idx_empresas_telefonos_unique_active', 'id_telefonos', unique=True, mssql_where=db.text('is_deleted = 0')),
     )
 
+# DEPRECATED: EmpresasRIF junction table no longer needed - use id_rif in EmpresasTransporte directly
+# Kept for backward compatibility and migration purposes
 class EmpresasRIF(db.Model):
     __tablename__ = "Empresas_RIF"
     id = db.Column(db.Integer, primary_key=True)
@@ -196,8 +204,14 @@ class Granjas(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     id_ubicaciones = db.Column(db.Integer, db.ForeignKey("Ubicaciones.id"), nullable=False)
     id_persona_responsable = db.Column(db.Integer, db.ForeignKey("Personas.id"), nullable=False)
+    id_rif = db.Column(db.Integer, db.ForeignKey("RIF.id"), nullable=True)  # 1:1 relationship with RIF
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
+    
+    __table_args__ = (
+        # Unique constraint for active RIF (allows reuse if soft deleted)
+        db.Index('idx_granjas_rif_unique_active', 'id_rif', unique=True, mssql_where=db.text('is_deleted = 0 AND id_rif IS NOT NULL')),
+    )
 
 class GranjasTelefonos(db.Model):
     # Corregimos el typo _tablename__ a __tablename__
@@ -214,6 +228,8 @@ class GranjasTelefonos(db.Model):
         db.Index('idx_granjas_telefonos_unique_active', 'id_telefonos', unique=True, mssql_where=db.text('is_deleted = 0')),
     )
 
+# DEPRECATED: GranjasRIF junction table no longer needed - use id_rif in Granjas directly
+# Kept for backward compatibility and migration purposes
 class GranjasRIF(db.Model):
     __tablename__ = "Granjas_RIF"
     id = db.Column(db.Integer, primary_key=True)

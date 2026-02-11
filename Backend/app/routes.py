@@ -212,25 +212,37 @@ class TransactionHelper:
         # 1. Direccion (Empresas requiere id_direcciones Y EmpresasDirecciones)
         direccion = TransactionHelper.get_or_create_direccion(dir_data)
         
-        # 2. Crear Empresa
+        # 2. Procesar RIF si se proporciona (ahora es 1:1, no junction table)
+        rif_id = None
+        if rif_data:
+            if "id" in rif_data:
+                rif_id = rif_data["id"]
+            elif "numero" in rif_data and "tipo" in rif_data:
+                # Buscar o crear RIF
+                rif_obj = RIF.query.filter_by(numero=rif_data["numero"], tipo=rif_data["tipo"]).first()
+                if not rif_obj:
+                    rif_obj = RIF(**rif_data)
+                    db.session.add(rif_obj)
+                    db.session.flush()
+                rif_id = rif_obj.id
+        
+        # 3. Crear Empresa con RIF directo
         data_empresa["id_direcciones"] = direccion.id
+        if rif_id:
+            data_empresa["id_rif"] = rif_id
         empresa = EmpresasTransporte(**data_empresa)
         db.session.add(empresa)
         db.session.flush()
 
-        # 3. Asociar Direccion en tabla intermedia
+        # 4. Asociar Direccion en tabla intermedia
         db.session.add(EmpresasDirecciones(id_empresas_transportes=empresa.id, id_direcciones=direccion.id))
 
-        # 4. Procesar Telefonos
+        # 5. Procesar Telefonos
         if isinstance(tlf_data, list):
             for t in tlf_data:
                 TransactionHelper.process_telefono(t, empresa.id, EmpresasTelefonos, "id_empresas_transportes")
         elif isinstance(tlf_data, dict) and tlf_data: # Por si viene un solo objeto
              TransactionHelper.process_telefono(tlf_data, empresa.id, EmpresasTelefonos, "id_empresas_transportes")
-
-        # 5. Procesar RIF
-        if rif_data:
-            TransactionHelper.process_rif(rif_data, empresa.id, EmpresasRIF, "id_empresas_transportes")
 
         return empresa.id
 
@@ -517,23 +529,35 @@ def create_lote_combined():
                     
                     persona_responsable_id = persona_resp.id
                 
+                # 3. Procesar RIF (ahora es 1:1, FK directo)
+                rif_g = granja_data.pop("rif", None)
+                rif_id = None
+                if rif_g:
+                    if "id" in rif_g:
+                        rif_id = rif_g["id"]
+                    elif "numero" in rif_g and "tipo" in rif_g:
+                        # Buscar o crear RIF
+                        rif_obj = RIF.query.filter_by(numero=rif_g["numero"], tipo=rif_g["tipo"]).first()
+                        if not rif_obj:
+                            rif_obj = RIF(**rif_g)
+                            db.session.add(rif_obj)
+                            db.session.flush()
+                        rif_id = rif_obj.id
+                
+                # Crear Granja con RIF directo
                 granja_v = Granjas(
                     id_ubicaciones=ubicacion.id, 
-                    id_persona_responsable=persona_responsable_id
+                    id_persona_responsable=persona_responsable_id,
+                    id_rif=rif_id
                 )
                 db.session.add(granja_v)
                 db.session.flush()
                 granja_id = granja_v.id
                 
-                # 3. GranjasTelefonos & GranjasRIF
+                # 4. GranjasTelefonos
                 tlfs_g = granja_data.pop("telefonos", [])
-                rif_g = granja_data.pop("rif", None)
-                
                 for t in tlfs_g:
                     TransactionHelper.process_telefono(t, granja_id, GranjasTelefonos, "id_granjas")
-                
-                if rif_g:
-                    TransactionHelper.process_rif(rif_g, granja_id, GranjasRIF, "id_granjas")
             
             # Crear Galpon
             galpon_data["id_granja"] = granja_id
@@ -771,37 +795,9 @@ def create_resource_generic(resource):
             data["codigo"] = f"P-{uuid.uuid4().hex[:6].upper()}"
 
     try:
-        # Procesar RIF para empresas_transporte y granjas
-        # El frontend puede enviar: id_rif (FK directo) o rif (objeto con tipo y numero)
-        rif_data = None
-        rif_id = data.pop("id_rif", None)
-        
-        if rif_id:
-            # Si se proporciona un ID de RIF existente, crear objeto de datos para process_rif
-            rif_data = {"id": rif_id}
-        else:
-            # Si se proporciona un objeto rif con tipo y numero
-            rif_data = data.pop("rif", None)
-        
         data.pop("id", None)
         obj = model(**data)
         db.session.add(obj)
-        db.session.flush()  # Get ID for RIF association
-        
-        # Si hay datos de RIF, crear la relación
-        if rif_data and resource == "empresas_transporte":
-            try:
-                TransactionHelper.process_rif(rif_data, obj.id, EmpresasRIF, "id_empresas_transportes")
-            except ValueError as e:
-                db.session.rollback()
-                return jsonify({"error": str(e)}), 409
-        elif rif_data and resource == "granjas":
-            try:
-                TransactionHelper.process_rif(rif_data, obj.id, GranjasRIF, "id_granjas")
-            except ValueError as e:
-                db.session.rollback()
-                return jsonify({"error": str(e)}), 409
-        
         db.session.commit()
         return jsonify(serialize(obj)), 201
     except Exception as e:
