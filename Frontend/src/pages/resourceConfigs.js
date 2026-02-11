@@ -99,9 +99,8 @@ export const resourceConfigs = {
   },
   empresas_transporte: {
     title: "Empresas de Transporte",
-    resource: "empresas_transporte", // Endpoint estándar
+    resource: "empresas_transporte", // Endpoint estándar - RIF debe agregarse por separado
     fields: [
-      { name: "rif", label: "RIF", required: true },
       { name: "nombre", label: "Razón Social", required: true },
       { name: "id_direcciones", label: "Dirección Fiscal", required: true },
     ],
@@ -110,8 +109,8 @@ export const resourceConfigs = {
     title: "Gestión de Granjas",
     resource: "granjas", // Endpoint estándar
     fields: [
-      { name: "rif", label: "RIF Granja", required: true },
       { name: "id_ubicaciones", label: "Ubicación Asociada", required: true },
+      { name: "id_persona_responsable", label: "Persona Responsable", required: true },
     ],
   },
   vehiculos: {
