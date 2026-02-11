@@ -41,9 +41,9 @@ const getPermissions = (resource) => {
     }
 
     // Update with admin credentials: Direcciones, Personas, Telefonos, Productos, 
-    // EmpresasTransporte, Vehiculos, Choferes, Viajes
+    // EmpresasTransporte, Vehiculos, Choferes, Viajes, RIF
     const adminCredentialResources = [
-      'direcciones', 'personas', 'telefonos', 'productos', 
+      'direcciones', 'personas', 'telefonos', 'productos', 'rif',
       'empresas_transporte', 'vehiculos', 'choferes',
       'viajes_tiempos', 'viajes_conteos', 'viajes_origen'
     ];
