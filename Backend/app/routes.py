@@ -764,6 +764,11 @@ def create_resource_generic(resource):
     if resource == "viajes_tiempos" or resource == "viajes_conteos" or resource == "viajes_origen":
         if "id_ticket" not in data:
             return jsonify({"error": "id_ticket requerido"}), 400
+    
+    # Auto-generar codigo para productos si no se proporciona
+    if resource == "productos":
+        if "codigo" not in data or not data["codigo"]:
+            data["codigo"] = f"P-{uuid.uuid4().hex[:6].upper()}"
 
     try:
         data.pop("id", None)
