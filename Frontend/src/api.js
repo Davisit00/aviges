@@ -19,6 +19,7 @@ api.interceptors.request.use((config) => {
 export const login = (payload) => api.post("/auth/login", payload);
 export const register = (payload) => api.post("/auth/register", payload);
 export const validateToken = () => api.get("/auth/validate");
+export const validateAdminCredentials = (payload) => api.post("/auth/validate_admin", payload);
 export const logout = () => {
   api.post("/auth/logout");
   localStorage.removeItem("access_token");
@@ -30,7 +31,7 @@ export const getMetadataEnums = () => api.get("/metadata/enums");
 
 // CRUD genérico
 export const listResource = (resource, params) =>
-  api.get(`/${resource}/all`, { params });
+  api.get(`/${resource}`, { params });
 export const getResource = (resource, id) => api.get(`/${resource}/${id}`);
 export const createResource = (resource, data) =>
   api.post(`/${resource}`, data);

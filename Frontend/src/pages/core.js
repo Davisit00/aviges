@@ -1,35 +1,77 @@
 import { logout, getUserInfo } from "../api.js"; // Asegurar importación de getUserInfo
-import { ProductsInterface } from "./products.js";
-import { UsuariosInterface } from "./usuarios.js";
-import { EmpresasTransporteInterface } from "./empresasTransporte.js";
-import { GranjasInterface } from "./granjas.js";
-import { GalponesInterface } from "./galpones.js";
-import { VehiculosInterface } from "./vehiculos.js";
-import { ChoferesInterface } from "./choferes.js";
-import { TicketsPesajeInterface } from "./ticketsPesaje.js";
-import { TicketsPesajePrintInterface } from "./ticketsPesajePrint.js";
-import { TicketsPesajeCrudInterface } from "./ticketsPesajeCrud.js";
-// IMPORTANTE: Importar la nueva interfaz
 import { WelcomeInterface } from "./welcome.js";
 
 // Variable global para almacenar el rol del usuario
 let currentUserRole = null;
 
-// Helper para determinar si es solo lectura (Rol != 1)
-// Mantenimiento es ReadOnly para no admins.
-const isMaintenanceReadOnly = () => currentUserRole !== 1;
-
-// ** LOGIC FOR PERMISSIONS **
-const getPermissions = (moduleType) => {
-  // Si es Usuario Admin (1), tiene acceso total
+// ** NEW PERMISSION LOGIC **
+const getPermissions = (resource) => {
+  // Admin (Role 1): Full CRUD on everything
   if (currentUserRole === 1) {
-    return { canCreate: true, canEdit: true, canDelete: true };
+    return {
+      canCreate: true,
+      canEdit: true,
+      canDelete: true,
+      requiresAdminForEdit: false,
+    };
   }
 
-  // Si es Usuario Estándar (2)
+  // Romanero (Role 2): Complex permission matrix
   if (currentUserRole === 2) {
-    if (moduleType === "maintenance") {
-      // Mantenimiento solo lectura
+    // CR only: Asignaciones, Ubicaciones, Granjas, Galpones, Lotes
+    const crOnlyResources = [
+      "asignaciones",
+      "ubicaciones",
+      "granjas",
+      "galpones",
+      "lotes",
+    ];
+    if (crOnlyResources.includes(resource)) {
+      return {
+        canCreate: true,
+        canEdit: false,
+        canDelete: false,
+        requiresAdminForEdit: false,
+      };
+    }
+
+    // Update with admin credentials: Direcciones, Personas, Telefonos, Productos,
+    // EmpresasTransporte, Vehiculos, Choferes, Viajes, RIF
+    const adminCredentialResources = [
+      "direcciones",
+      "personas",
+      "telefonos",
+      "productos",
+      "rif",
+      "empresas_transporte",
+      "vehiculos",
+      "choferes",
+      "viajes_tiempos",
+      "viajes_conteos",
+      "viajes_origen",
+    ];
+    if (adminCredentialResources.includes(resource)) {
+      return {
+        canCreate: true,
+        canEdit: true,
+        canDelete: false,
+        requiresAdminForEdit: true,
+      };
+    }
+
+    // TicketPesaje: Special case - can edit if not finalized
+    if (resource === "tickets_pesaje") {
+      return {
+        canCreate: true,
+        canEdit: true, // Will check finalized status before edit
+        canDelete: false,
+        requiresAdminForEdit: false, // Will require if finalized
+        specialEditCheck: "ticket_finalized",
+      };
+    }
+
+    // Estadisticas: Read-only
+    if (resource === "estadisticas") {
       return {
         canCreate: false,
         canEdit: false,
@@ -37,14 +79,25 @@ const getPermissions = (moduleType) => {
         readOnly: true,
       };
     }
-    if (moduleType === "process") {
-      // Procesos (Tickets/Aves): Puede crear, PERO NO editar ni eliminar
-      return { canCreate: true, canEdit: false, canDelete: false };
+
+    // Roles, Usuarios: No access
+    if (resource === "roles" || resource === "usuarios") {
+      return {
+        canCreate: false,
+        canEdit: false,
+        canDelete: false,
+        noAccess: true,
+      };
     }
   }
 
-  // Default safe fallback
-  return { canCreate: false, canEdit: false, canDelete: false, readOnly: true };
+  // Default: No access
+  return {
+    canCreate: false,
+    canEdit: false,
+    canDelete: false,
+    readOnly: true,
+  };
 };
 
 function render(template, node) {
@@ -189,37 +242,37 @@ window.addEventListener("DOMContentLoaded", async () => {
   productsButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(ProductsInterface.template, app);
-    ProductsInterface.setup(getPermissions("maintenance"));
+    ProductsInterface.setup(getPermissions("productos"));
   });
 
   vehiclesButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(VehiculosInterface.template, app);
-    VehiculosInterface.setup(getPermissions("maintenance"));
+    VehiculosInterface.setup(getPermissions("vehiculos"));
   });
 
   driversButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(ChoferesInterface.template, app);
-    ChoferesInterface.setup(getPermissions("maintenance"));
+    ChoferesInterface.setup(getPermissions("choferes"));
   });
 
   transportCompaniesButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(EmpresasTransporteInterface.template, app);
-    EmpresasTransporteInterface.setup(getPermissions("maintenance"));
+    EmpresasTransporteInterface.setup(getPermissions("empresas_transporte"));
   });
 
   farmsButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(GranjasInterface.template, app);
-    GranjasInterface.setup(getPermissions("maintenance"));
+    GranjasInterface.setup(getPermissions("granjas"));
   });
 
   barnsButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(GalponesInterface.template, app);
-    GalponesInterface.setup(getPermissions("maintenance"));
+    GalponesInterface.setup(getPermissions("galpones"));
   });
 
   usersButton.addEventListener("click", () => {
@@ -239,8 +292,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   weighButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(TicketsPesajeInterface.template, app);
-    // Tickets usa permisos de 'process'
-    TicketsPesajeInterface.setup(getPermissions("process"));
+    TicketsPesajeInterface.setup(getPermissions("tickets_pesaje"));
   });
 
   logoutButton.addEventListener("click", () => {
@@ -258,7 +310,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   ticketsButton.addEventListener("click", () => {
     const app = document.getElementById("content-container");
     render(TicketsPesajeCrudInterface.template, app);
-    TicketsPesajeCrudInterface.setup(getPermissions("process"));
+    TicketsPesajeCrudInterface.setup(getPermissions("tickets_pesaje"));
   });
 
   // 1. Obtener información del usuario y Rol
