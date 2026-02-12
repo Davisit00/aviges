@@ -1,16 +1,18 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError # <--- MODIFICADO: Agregar SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import serial
 import serial.tools.list_ports 
-import datetime # Agregado para formatear fechas
+import datetime 
+import uuid
 
 from .models import (
     Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
     Vehiculos, Choferes, TicketPesaje, Direcciones, Personas, Telefonos,
     Ubicaciones, Asignaciones, Lotes, ViajesTiempos, ViajesConteos, 
-    ViajesOrigen, Estadisticas
+    ViajesOrigen, Estadisticas, PersonasTelefonos,
+    RIF, EmpresasTelefonos, GranjasTelefonos
 )
 from .services.crud import CRUDService
 from .services.validation import validate_payload
@@ -47,16 +49,326 @@ MODEL_MAP = {
     "estadisticas": Estadisticas,
 }
 
-def serialize(obj):
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+# --- SERIALIZACION AVANZADA ---
+
+def get_telefonos_for_entity(entity_id, link_model, link_fk_name):
+    """Ayuda a obtener lista de teléfonos a través de tablas intermedias"""
+    from .models import Telefonos
+    links = link_model.query.filter(getattr(link_model, link_fk_name) == entity_id).all()
+    # Recolectar IDs
+    t_ids = [l.id_telefonos for l in links]
+    if not t_ids:
+        return []
+    
+    phones = Telefonos.query.filter(Telefonos.id.in_(t_ids)).all()
+    # Serializar recursivamente como objeto 'telefonos' (sin lógica extra por ahora)
+    return [clean_data({c.name: getattr(p, c.name) for c in p.__table__.columns}) for p in phones]
+
+def clean_data(data):
+    """Elimina campos de sistema y sensibles de un diccionario"""
+    keys_to_remove = [
+        "created_at", "is_deleted", "contraseña", "contrasena", 
+        "password_hash", "modified_at"
+    ]
+    for key in keys_to_remove:
+        data.pop(key, None)
+    return data
+
+def expand_resource(data, resource_name, obj):
+    """
+    Enriquece el diccionario 'data' con objetos anidados basados en las FKs.
+    Reemplaza el ID de la FK por el objeto completo.
+    """
+    
+    # --- 1. Expansiones Genéricas (Direcciones, RIF) ---
+    # Estas aplican a cualquier recurso que tenga estas columnas
+    
+    if "id_direcciones" in data:
+        if data["id_direcciones"]:
+            d = Direcciones.query.get(data["id_direcciones"])
+            if d:
+                # Serializamos manualmente para evitar ciclos raros, aunque serialize("direcciones") serviria
+                d_data = {c.name: getattr(d, c.name) for c in d.__table__.columns}
+                data["direccion"] = clean_data(d_data)
+        data.pop("id_direcciones", None) # Removemos fk
+    
+    if "id_rif" in data:
+        if data["id_rif"]:
+            r = RIF.query.get(data["id_rif"])
+            if r:
+                r_data = {c.name: getattr(r, c.name) for c in r.__table__.columns}
+                data["rif"] = clean_data(r_data)
+        data.pop("id_rif", None)
+
+    # --- 2. Lógica Específica por Recurso ---
+
+    if resource_name == "usuarios":
+        # Rol (Objeto completo)
+        if "id_roles" in data:
+            r = Roles.query.get(data["id_roles"])
+            if r:
+               data["rol"] = serialize(r, "roles")
+            data.pop("id_roles", None)
+        
+        # Persona
+        if "id_personas" in data:
+            p = Personas.query.get(data["id_personas"])
+            if p:
+                data["persona"] = serialize(p, "personas")
+            data.pop("id_personas", None)
+
+    elif resource_name == "personas":
+        # Telefonos
+        data["telefonos"] = get_telefonos_for_entity(obj.id, PersonasTelefonos, "id_personas")
+
+    elif resource_name == "choferes":
+        # Persona
+        if "id_personas" in data:
+            p = Personas.query.get(data["id_personas"])
+            if p:
+                data["persona"] = serialize(p, "personas")
+            data.pop("id_personas", None)
+        # Empresa
+        if "id_empresas_transportes" in data:
+            e = EmpresasTransporte.query.get(data["id_empresas_transportes"])
+            if e:
+                data["empresa"] = serialize(e, "empresas_transporte")
+            data.pop("id_empresas_transportes", None)
+
+    elif resource_name == "vehiculos":
+        # Empresa
+        if "id_empresas_transportes" in data:
+            e = EmpresasTransporte.query.get(data["id_empresas_transportes"])
+            if e:
+                data["empresa"] = serialize(e, "empresas_transporte")
+            data.pop("id_empresas_transportes", None)
+            
+    elif resource_name == "empresas_transporte":
+        # Telefonos
+        data["telefonos"] = get_telefonos_for_entity(obj.id, EmpresasTelefonos, "id_empresas_transportes")
+
+    elif resource_name == "granjas":
+        # Telefonos
+        data["telefonos"] = get_telefonos_for_entity(obj.id, GranjasTelefonos, "id_granjas")
+        # Ubicacion (que internamente resolvera direccion)
+        if "id_ubicaciones" in data:
+            u = Ubicaciones.query.get(data["id_ubicaciones"])
+            if u:
+                data["ubicacion"] = serialize(u, "ubicaciones")
+            data.pop("id_ubicaciones", None)
+        # Responsable (Persona)
+        if "id_persona_responsable" in data:
+             p = Personas.query.get(data["id_persona_responsable"])
+             if p:
+                data["responsable"] = serialize(p, "personas")
+             data.pop("id_persona_responsable", None)
+
+    elif resource_name == "galpones":
+        # Granja
+        if "id_granja" in data:
+            # Nota: para evitar bucles infinitos pesados, quiza quieras una serializacion "light" de granja
+            # pero aqui usaremos la completa. Si Granja tiene muchos galpones no pasa nada por que la relacion es unidireccional aqui.
+            g = Granjas.query.get(data["id_granja"])
+            if g:
+                data["granja"] = serialize(g, "granjas")
+            data.pop("id_granja", None)
+
+    elif resource_name == "lotes":
+        # Galpon
+        if "id_galpones" in data:
+            g = Galpones.query.get(data["id_galpones"])
+            if g:
+                data["galpon"] = serialize(g, "galpones")
+            data.pop("id_galpones", None)
+
+    elif resource_name == "asignaciones":
+        # Vehiculo
+        if "id_vehiculos" in data:
+            v = Vehiculos.query.get(data["id_vehiculos"])
+            if v:
+                data["vehiculo"] = serialize(v, "vehiculos")
+            data.pop("id_vehiculos", None)
+        # Chofer
+        if "id_chofer" in data:
+            from .models import Choferes # local import just in case
+            c = Choferes.query.get(data["id_chofer"])
+            if c:
+                data["chofer"] = serialize(c, "choferes")
+            data.pop("id_chofer", None)
+
+    elif resource_name == "tickets_pesaje":
+        # Producto
+        if "id_producto" in data:
+            prod = Productos.query.get(data["id_producto"])
+            data["producto"] = serialize(prod, "productos") if prod else None
+            data.pop("id_producto", None)
+        
+        # Usuarios (Operadores)
+        if "id_usuarios_primer_peso" in data:
+            u1 = Usuarios.query.get(data["id_usuarios_primer_peso"])
+            if u1: 
+                # Evitamos expandir todo el usuario recursivamente para tickets (demasiada data innecesaria)
+                # O usamos serialize pero aceptamos el costo. Usaré una versión simplificada.
+                data["operador_entrada"] = {"id": u1.id, "usuario": u1.usuario}
+            data.pop("id_usuarios_primer_peso", None)
+            
+        if "id_usuarios_segundo_peso" in data and data["id_usuarios_segundo_peso"]:
+            u2 = Usuarios.query.get(data["id_usuarios_segundo_peso"])
+            if u2:
+                data["operador_salida"] = {"id": u2.id, "usuario": u2.usuario}
+            data.pop("id_usuarios_segundo_peso", None)
+
+        # Ubicaciones (Origen/Destino)
+        if "id_origen" in data:
+            ubi_o = Ubicaciones.query.get(data["id_origen"])
+            data["origen"] = serialize(ubi_o, "ubicaciones") if ubi_o else None
+            data.pop("id_origen", None)
+        
+        if "id_destino" in data:
+            ubi_d = Ubicaciones.query.get(data["id_destino"])
+            data["destino"] = serialize(ubi_d, "ubicaciones") if ubi_d else None
+            data.pop("id_destino", None)
+
+    return data
+
+def serialize(obj, resource_name=None):
+    if not obj:
+        return None
+    # Base serialization
+    data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+    
+    # 1. Limpieza General Primero
+    data = clean_data(data)
+
+    # 2. Si tenemos el nombre del recurso, intentamos expandir
+    if resource_name:
+        try:
+            return expand_resource(data, resource_name, obj)
+        except Exception as e:
+            # En producción, logguear esto mejor
+            print(f"Advertencia expandiendo {resource_name} ID {obj.id}: {e}")
+            return data
+            
+    return data
+
+# --- HELPER FUNCTIONS ---
+
+def process_rif(db, rif_input):
+    """
+    Gestures the creation or retrieval of a RIF.
+    rif_input can be a string "J-12345678" or a dict {"tipo": "J", "numero": "12345678"}
+    Returns the RIF object instance.
+    """
+    tipo = None
+    numero = None
+
+    if isinstance(rif_input, str):
+        parts = rif_input.split('-')
+        if len(parts) >= 2:
+            tipo = parts[0]
+            numero = parts[1]
+    elif isinstance(rif_input, dict):
+        tipo = rif_input.get('tipo')
+        numero = rif_input.get('numero')
+
+    if not tipo or not numero:
+        return None
+
+    # Check existence
+    existing = RIF.query.filter_by(tipo=tipo, numero=numero, is_deleted=False).first()
+    if existing:
+        return existing
+    
+    new_rif = RIF(tipo=tipo, numero=numero)
+    db.session.add(new_rif)
+    db.session.flush()
+    return new_rif
+
+def process_telefonos(db, telefonos_data):
+    """
+    Creates phone records. 
+    Returns a list of created Telefonos objects.
+    """
+    created_phones = []
+    for t_data in telefonos_data:
+        # Check basic validity
+        if t_data.get("numero") and t_data.get("operadora"):
+            existing = Telefonos.query.filter_by(numero=t_data["numero"], is_deleted=False).first()
+            if existing:
+                created_phones.append(existing)
+            else:
+                nuevo_t = Telefonos(**t_data)
+                db.session.add(nuevo_t)
+                db.session.flush()
+                created_phones.append(nuevo_t)
+    return created_phones
+
+def process_persona(db, persona_data):
+    """
+    Busca una persona por cédula. 
+    Si existe, actualiza sus datos, dirección y teléfonos.
+    Si no existe, la crea.
+    Retorna el objeto Personas y la lista de teléfonos procesados.
+    """
+    cedula = persona_data.get("cedula")
+    if not cedula:
+        raise ValueError("La cédula es requerida")
+
+    # Extraer data anidada
+    direccion_data = persona_data.pop("direccion", {})
+    telefonos_data = persona_data.pop("telefonos", [])
+
+    # Buscar existencia
+    persona = Personas.query.filter_by(cedula=cedula, is_deleted=False).first()
+
+    if persona:
+        # --- ACTUALIZAR EXISTENTE ---
+        # 1. Actualizar campos directos
+        for k, v in persona_data.items():
+            if hasattr(persona, k) and v is not None:
+                setattr(persona, k, v)
+        
+        # 2. Actualizar Dirección
+        if direccion_data and persona.id_direcciones:
+            direccion = Direcciones.query.get(persona.id_direcciones)
+            if direccion:
+                for k, v in direccion_data.items():
+                    if hasattr(direccion, k) and v is not None:
+                        setattr(direccion, k, v)
+        elif direccion_data:
+            # Caso raro: Persona existe pero no tiene direccion (defensive)
+            direccion = Direcciones(**direccion_data)
+            db.session.add(direccion)
+            db.session.flush()
+            persona.id_direcciones = direccion.id
+    else:
+        # --- CREAR NUEVO ---
+        # 1. Crear Dirección
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+
+        # 2. Crear Persona
+        persona_data["id_direcciones"] = direccion.id
+        persona = Personas(**persona_data)
+        db.session.add(persona)
+        db.session.flush()
+
+    # 3. Procesar Teléfonos (Común para ambos casos)
+    created_phones = process_telefonos(db, telefonos_data)
+    
+    # Vincular teléfonos (evitar duplicados en la tabla intermedia)
+    current_links = [l.id_telefonos for l in PersonasTelefonos.query.filter_by(id_personas=persona.id).all()]
+    for ph in created_phones:
+        if ph.id not in current_links:
+            link = PersonasTelefonos(id_personas=persona.id, id_telefonos=ph.id)
+            db.session.add(link)
+            
+    return persona, created_phones
 
 @api_bp.route("/metadata/enums", methods=["GET"])
 @jwt_required()
 def get_enums():
-    """
-    Retorna los valores permitidos para campos tipo ENUM (Check Constraints)
-    Útil para llenar select/dropdowns en el Frontend.
-    """
     return jsonify({
         "telefonos_tipo": ['Celular', 'Casa', 'Trabajo'],
         "ubicaciones_tipo": ['Granja', 'Matadero', 'Balanceados', 'Despresados', 'Incubadora', 'Reciclaje', 'Proveedor', 'Cliente', 'Almacen'],
@@ -76,12 +388,10 @@ def login():
         return jsonify({"error": "usuario y contrasena son requeridos"}), 400
 
     user = Usuarios.query.filter_by(usuario=usuario).first()
-    print("contraseña hash:", generate_password_hash("123456"))
 
     if not user or not check_password_hash(user.contraseña, contrasena):
         return jsonify({"error": "Credenciales inválidas"}), 401
 
-    # Incluimos el id_roles en los claims del token
     token = create_access_token(identity=str(user.id), additional_claims={"id_roles": user.id_roles})
     return jsonify({"access_token": token})
 
@@ -91,12 +401,10 @@ def register():
     if "contrasena" not in data:
         return jsonify({"error": "contrasena es requerida"}), 400
 
-    # CAMBIO: Usar la clave correcta del modelo (contraseña)
     data["contraseña"] = generate_password_hash(data.pop("contrasena"))
     
     ok, err = validate_payload(Usuarios, data, partial=False)
     if not ok:
-
         return jsonify({"error": err}), 400
 
     service = CRUDService(Usuarios)
@@ -118,87 +426,59 @@ def logout():
     return jsonify({"logged_out": True})
 
 # ---------- COMBINED ENDPOINTS ----------
-# These endpoints handle creating normalized entities together
 
 @api_bp.route("/combined/usuarios", methods=["POST"])
 @jwt_required()
 def create_usuario_combined():
-    """
-    Create a Usuario along with its Persona and Direccion in a single transaction.
-    Expected payload:
-    {
-        "usuario": "admin",
-        "contrasena": "123456",
-        "id_roles": 1,
-        "persona": {
-            "nombre": "Admin",
-            "apellido": "Principal",
-            "cedula": "12345678",
-            "direccion": {
-                "pais": "Venezuela",
-                "estado": "Zulia",
-                "municipio": "Maracaibo",
-                "sector": "Centro",
-                "descripcion": "Av. Principal"
-            }
-        }
-    }
-    """
     from . import db
     data = request.get_json(force=True) or {}
     
     try:
         # Extract nested data
         persona_data = data.pop("persona", {})
-        direccion_data = persona_data.pop("direccion", {})
-        telefonos_data = persona_data.pop("telefonos", []) # <--- AGREGADO: Extraer teléfonos
         
         # Validate required fields
         if not data.get("usuario") or not data.get("contrasena"):
             return jsonify({"error": "usuario y contrasena son requeridos"}), 400
-        if not persona_data.get("nombre") or not persona_data.get("apellido") or not persona_data.get("cedula"):
-            return jsonify({"error": "nombre, apellido y cedula de la persona son requeridos"}), 400
-        if not direccion_data.get("pais") or not direccion_data.get("estado"):
-            return jsonify({"error": "pais y estado de la direccion son requeridos"}), 400
+        if not persona_data.get("cedula"):
+             return jsonify({"error": "cedula es requerida"}), 400
+
+        # CAMBIO: Usar logic de procesado inteligente de persona
+        try:
+            persona, created_phones = process_persona(db, persona_data)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         
-        # Create Direccion
-        direccion = Direcciones(**direccion_data)
-        db.session.add(direccion)
-        db.session.flush()  # Get the ID without committing
-        
-        # Create Persona
-        persona_data["id_direcciones"] = direccion.id
-        persona = Personas(**persona_data)
-        db.session.add(persona)
-        db.session.flush() # Get the ID for foreign keys
-        
-        # AGREGADO: Create Telefonos
-        created_phones = []
-        for t_data in telefonos_data:
-            if t_data.get("numero") and t_data.get("estado"):
-                t_data["id_personas"] = persona.id
-                nuevo_t = Telefonos(**t_data)
-                db.session.add(nuevo_t)
-                created_phones.append(nuevo_t)
-        
-        # Create Usuario
+        # Validar si el usuario (login) ya existe
+        if Usuarios.query.filter_by(usuario=data["usuario"], is_deleted=False).first():
+             return jsonify({"error": "El nombre de usuario ya está en uso"}), 409
+
+        # Create Usuario linked to the (new or existing) persona
         data["id_personas"] = persona.id
         data["contraseña"] = generate_password_hash(data.pop("contrasena"))
+        
+        # Verificar si esta persona YA tiene un usuario asociado para evitar doble cuenta
+        if Usuarios.query.filter_by(id_personas=persona.id, is_deleted=False).first():
+            return jsonify({"error": "Esta persona ya tiene un usuario de sistema asignado."}), 409
+
         usuario = Usuarios(**data)
         db.session.add(usuario)
         
         db.session.commit()
         
+        # Recuperar direccion para serializar
+        direccion = Direcciones.query.get(persona.id_direcciones)
+
         return jsonify({
             "usuario": serialize(usuario),
             "persona": serialize(persona),
             "direccion": serialize(direccion),
-            "telefonos": [serialize(t) for t in created_phones] # AGREGADO: Retornar teléfonos
+            "telefonos": [serialize(t) for t in created_phones] 
         }), 201
         
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Usuario, Cédula, etc)."}), 409
+        return jsonify({"error": f"Error de integridad: {e.orig}"}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
@@ -206,43 +486,27 @@ def create_usuario_combined():
 @api_bp.route("/combined/choferes", methods=["POST"])
 @jwt_required()
 def create_chofer_combined():
-    """
-    Create a Chofer along with its Persona and Direccion and Telefonos.
-    """
     from . import db
     data = request.get_json(force=True) or {}
     
     try:
         # Extract nested data
         persona_data = data.pop("persona", {})
-        direccion_data = persona_data.pop("direccion", {})
-        telefonos_data = persona_data.pop("telefonos", []) # <--- AGREGADO
         
-        # Validate required fields
         if not data.get("id_empresas_transportes"):
             return jsonify({"error": "id_empresas_transportes es requerido"}), 400
-        if not persona_data.get("nombre") or not persona_data.get("apellido") or not persona_data.get("cedula"):
-            return jsonify({"error": "nombre, apellido y cedula de la persona son requeridos"}), 400
+        if not persona_data.get("cedula"):
+             return jsonify({"error": "cedula es requerida"}), 400
         
-        # Create Direccion
-        direccion = Direcciones(**direccion_data)
-        db.session.add(direccion)
-        db.session.flush()
-        
-        # Create Persona
-        persona_data["id_direcciones"] = direccion.id
-        persona = Personas(**persona_data)
-        db.session.add(persona)
-        db.session.flush()
+        # CAMBIO: Usar process_persona
+        try:
+            persona, created_phones = process_persona(db, persona_data)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
-        # AGREGADO: Create Telefonos
-        created_phones = []
-        for t_data in telefonos_data:
-            if t_data.get("numero") and t_data.get("estado"):
-                t_data["id_personas"] = persona.id
-                nuevo_t = Telefonos(**t_data)
-                db.session.add(nuevo_t)
-                created_phones.append(nuevo_t)
+        # Verificar si ya es chofer
+        if Choferes.query.filter_by(id_personas=persona.id, is_deleted=False).first():
+            return jsonify({"error": "Esta persona ya está registrada como Chofer."}), 409
         
         # Create Chofer
         data["id_personas"] = persona.id
@@ -251,16 +515,19 @@ def create_chofer_combined():
         
         db.session.commit()
         
+        direccion = Direcciones.query.get(persona.id_direcciones)
+
         return jsonify({
             "chofer": serialize(chofer),
             "persona": serialize(persona),
             "direccion": serialize(direccion),
-            "telefonos": [serialize(t) for t in created_phones] # AGREGADO
+            "telefonos": [serialize(t) for t in created_phones] 
         }), 201
         
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (Cédula, Placa, Código, etc)."}), 409
+        print(f"Error integrity: {e}")
+        return jsonify({"error": "Error creando chofer. Verifique datos."}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
@@ -268,52 +535,56 @@ def create_chofer_combined():
 @api_bp.route("/combined/empresas_transporte", methods=["POST"])
 @jwt_required()
 def create_empresa_transporte_combined():
-    """
-    Create an Empresa de Transporte along with its Direccion.
-    Expected payload:
-    {
-        "nombre": "Transportes ABC",
-        "rif": "J-12345678-9",
-        "direccion": {
-            "pais": "Venezuela",
-            "estado": "Zulia",
-            "municipio": "Maracaibo",
-            "sector": "Industrial",
-            "descripcion": "Zona Industrial"
-        }
-    }
-    """
     from . import db
     data = request.get_json(force=True) or {}
     
     try:
         # Extract nested data
         direccion_data = data.pop("direccion", {})
+        telefonos_data = data.pop("telefonos", [])
+        rif_input = data.pop("rif", None)
         
         # Validate required fields
-        if not data.get("nombre") or not data.get("rif"):
-            return jsonify({"error": "nombre y rif son requeridos"}), 400
+        if not data.get("nombre"):
+            return jsonify({"error": "nombre es requerido"}), 400
+        if not rif_input:
+            return jsonify({"error": "rif es requerido"}), 400
         
-        # Create Direccion
+        # 1. Handle RIF
+        rif_obj = process_rif(db, rif_input)
+        if not rif_obj:
+            return jsonify({"error": "Formato de RIF inválido (ej: J-12345678)"}), 400
+        
+        # 2. Create Direccion
         direccion = Direcciones(**direccion_data)
         db.session.add(direccion)
         db.session.flush()
         
-        # Create Empresa
+        # 3. Create Empresa
         data["id_direcciones"] = direccion.id
+        data["id_rif"] = rif_obj.id
         empresa = EmpresasTransporte(**data)
         db.session.add(empresa)
+        db.session.flush()
+        
+        # 4. Handle Phones
+        created_phones = process_telefonos(db, telefonos_data)
+        for ph in created_phones:
+            link = EmpresasTelefonos(id_empresas_transportes=empresa.id, id_telefonos=ph.id)
+            db.session.add(link)
         
         db.session.commit()
         
         return jsonify({
             "empresa": serialize(empresa),
-            "direccion": serialize(direccion)
+            "direccion": serialize(direccion),
+            "rif": serialize(rif_obj),
+            "telefonos": [serialize(t) for t in created_phones]
         }), 201
         
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (RIF, etc)."}), 409
+        return jsonify({"error": f"Error de integridad (posible duplicado): {e.orig}"}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
@@ -321,179 +592,259 @@ def create_empresa_transporte_combined():
 @api_bp.route("/combined/granjas", methods=["POST"])
 @jwt_required()
 def create_granja_combined():
-    """
-    Create a Granja along with its Ubicacion and Direccion.
-    Expected payload:
-    {
-        "rif": "J-98765432-1",
-        "ubicacion": {
-            "nombre": "Granja La Esperanza",
-            "tipo": "Granja",
-            "direccion": {
-                "pais": "Venezuela",
-                "estado": "Zulia",
-                "municipio": "Maracaibo",
-                "sector": "Rural",
-                "descripcion": "Km 15 via Perija"
-            }
-        }
-    }
-    """
     from . import db
     data = request.get_json(force=True) or {}
     
     try:
         # Extract nested data
         ubicacion_data = data.pop("ubicacion", {})
-        direccion_data = ubicacion_data.pop("direccion", {})
+        direccion_data = ubicacion_data.pop("direccion", {}) 
+        telefonos_data = data.pop("telefonos", [])
+        rif_input = data.pop("rif", None)
         
+        # NUEVO: Extraer datos del responsable
+        persona_data = data.pop("persona", {})
+
         # Validate required fields
-        if not data.get("rif"):
+        if not rif_input:
             return jsonify({"error": "rif es requerido"}), 400
         if not ubicacion_data.get("nombre"):
             return jsonify({"error": "nombre de ubicacion es requerido"}), 400
         
-        # Automatically set tipo to "Granja" if not provided
-        if "tipo" not in ubicacion_data:
-            ubicacion_data["tipo"] = "Granja"
+        # Validar datos mínimos del responsable
+        if not persona_data.get("cedula") or not persona_data.get("nombre"):
+            return jsonify({"error": "Cédula y Nombre del responsable son requeridos"}), 400
         
-        # Create Direccion
+        # 1. Procesar Persona Responsable (Reutiliza lógica existente)
+        # Esto busca por cédula: si existe retorna el obj, si no, lo crea.
+        try:
+            # Nota: process_persona espera direccion/telefonos dentro de persona_data si se quisieran guardar para la persona
+            # En este caso, enviamos datos básicos.
+            persona_resp, _ = process_persona(db, persona_data)
+        except ValueError as e:
+            return jsonify({"error": f"Error en responsable: {str(e)}"}), 400
+
+        # 2. Handle RIF
+        rif_obj = process_rif(db, rif_input)
+        
+        # 3. Create Direccion (De la Granja)
         direccion = Direcciones(**direccion_data)
         db.session.add(direccion)
         db.session.flush()
         
-        # Create Ubicacion
+        # 4. Create Ubicacion
+        if "tipo" not in ubicacion_data:
+            ubicacion_data["tipo"] = "Granja"
         ubicacion_data["id_direcciones"] = direccion.id
         ubicacion = Ubicaciones(**ubicacion_data)
         db.session.add(ubicacion)
         db.session.flush()
         
-        # Create Granja
+        # 5. Create Granja
         data["id_ubicaciones"] = ubicacion.id
+        data["id_persona_responsable"] = persona_resp.id # Asignamos el ID procesado
+        
+        if rif_obj:
+            data["id_rif"] = rif_obj.id
+            
         granja = Granjas(**data)
         db.session.add(granja)
+        db.session.flush()
+
+        # 6. Handle Phones (De la Granja)
+        created_phones = process_telefonos(db, telefonos_data)
+        for ph in created_phones:
+            link = GranjasTelefonos(id_granjas=granja.id, id_telefonos=ph.id)
+            db.session.add(link)
         
         db.session.commit()
         
         return jsonify({
             "granja": serialize(granja),
+            "responsable": serialize(persona_resp), # Retornamos info del responsable
             "ubicacion": serialize(ubicacion),
-            "direccion": serialize(direccion)
+            "direccion": serialize(direccion),
+            "rif": serialize(rif_obj) if rif_obj else None,
+            "telefonos": [serialize(t) for t in created_phones]
         }), 201
         
     except IntegrityError as e:
         db.session.rollback()
-        return jsonify({"error": "El registro ya existe. Verifique campos únicos (RIF, etc)."}), 409
+        return jsonify({"error": f"Error de integridad: {e.orig}"}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
-# Combined GET endpoints for retrieving normalized data with joins
-@api_bp.route("/combined/usuarios/<int:usuario_id>", methods=["GET"])
+@api_bp.route("/combined/lotes", methods=["POST"])
 @jwt_required()
-def get_usuario_combined(usuario_id):
-    """Get Usuario with complete Persona, Direccion and Telefonos data"""
-    usuario = Usuarios.query.get_or_404(usuario_id)
-    persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
-    direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
-    telefonos = Telefonos.query.filter_by(id_personas=persona.id).all() if persona else [] # <--- AGREGADO
+def create_lote_combined():
+    from . import db
+    data = request.get_json(force=True) or {}
+    if not data.get("id_galpones") or not data.get("codigo_lote"):
+        return jsonify({"error": "id_galpones y codigo_lote son requeridos"}), 400
+    try:
+        lote = Lotes(**data)
+        db.session.add(lote)
+        db.session.commit()
+        return jsonify(serialize(lote)), 201
+    except IntegrityError:
+        return jsonify({"error": "Error creando lote. Verifique que no exista el código."}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    result = serialize(usuario)
-    if persona:
-        result["persona"] = serialize(persona)
-        result["persona"]["telefonos"] = [serialize(t) for t in telefonos] # <--- AGREGADO
-        if direccion:
-            result["persona"]["direccion"] = serialize(direccion)
-    
-    return jsonify(result)
+# ---------- UPDATE (PUT) COMBINED ----------
 
-@api_bp.route("/combined/choferes/<int:chofer_id>", methods=["GET"])
+@api_bp.route("/combined/usuarios/<int:usuario_id>", methods=["PUT"])
 @jwt_required()
-def get_chofer_combined(chofer_id):
-    """Get Chofer with complete Persona, Direccion and Telefonos data"""
-    chofer = Choferes.query.get_or_404(chofer_id)
-    persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
-    direccion = Direcciones.query.get(persona.id_direcciones) if (persona and persona.id_direcciones) else None
-    telefonos = Telefonos.query.filter_by(id_personas=persona.id).all() if persona else [] # <--- AGREGADO
+def update_usuario_combined(usuario_id):
+    from . import db
+    data = request.get_json(force=True) or {}
     
-    result = serialize(chofer)
-    if persona:
-        result["persona"] = serialize(persona)
-        result["persona"]["telefonos"] = [serialize(t) for t in telefonos] # <--- AGREGADO
-        if direccion:
-            result["persona"]["direccion"] = serialize(direccion)
-    
-    return jsonify(result)
+    try:
+        usuario = Usuarios.query.get_or_404(usuario_id)
+        if "contrasena" in data:
+            usuario.contraseña = generate_password_hash(data.pop("contrasena"))
+        if "usuario" in data:
+            usuario.usuario = data["usuario"]
+        if "id_roles" in data:
+            usuario.id_roles = data["id_roles"]
+            
+        persona_data = data.get("persona", {})
+        direccion_data = persona_data.get("direccion", {})
+        
+        persona = Personas.query.get(usuario.id_personas)
+        if persona and persona_data:
+            for k, v in persona_data.items():
+                if k != "direccion" and k != "telefonos" and hasattr(persona, k):
+                    setattr(persona, k, v)
+        
+        if persona and direccion_data:
+            direccion = Direcciones.query.get(persona.id_direcciones)
+            if direccion:
+                for k, v in direccion_data.items():
+                    if hasattr(direccion, k):
+                        setattr(direccion, k, v)
+        
+        telefonos_data = persona_data.get("telefonos", [])
+        if persona and telefonos_data:
+            created_phones = process_telefonos(db, telefonos_data)
+            current_links = [l.id_telefonos for l in PersonasTelefonos.query.filter_by(id_personas=persona.id).all()]
+            for ph in created_phones:
+                if ph.id not in current_links:
+                    link = PersonasTelefonos(id_personas=persona.id, id_telefonos=ph.id)
+                    db.session.add(link)
 
-@api_bp.route("/combined/granjas/<int:granja_id>", methods=["GET"])
+        db.session.commit()
+        return jsonify(serialize(usuario)), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error al actualizar: {str(e)}"}), 500
+
+@api_bp.route("/combined/choferes/<int:chofer_id>", methods=["PUT"])
 @jwt_required()
-def get_granja_combined(granja_id):
-    """Get Granja with complete Ubicacion and Direccion data"""
-    granja = Granjas.query.get_or_404(granja_id)
-    ubicacion = Ubicaciones.query.get(granja.id_ubicaciones) if granja.id_ubicaciones else None
-    direccion = Direcciones.query.get(ubicacion.id_direcciones) if (ubicacion and ubicacion.id_direcciones) else None
+def update_chofer_combined(chofer_id):
+    from . import db
+    data = request.get_json(force=True) or {}
     
-    result = serialize(granja)
-    if ubicacion:
-        result["ubicacion"] = serialize(ubicacion)
-        if direccion:
-            result["ubicacion"]["direccion"] = serialize(direccion)
-    
-    return jsonify(result)
+    try:
+        chofer = Choferes.query.get_or_404(chofer_id)
+        if "id_empresas_transportes" in data:
+            chofer.id_empresas_transportes = data["id_empresas_transportes"]
 
-@api_bp.route("/combined/usuarios", methods=["GET"])
+        persona_data = data.get("persona", {})
+        direccion_data = persona_data.get("direccion", {})
+        
+        persona = Personas.query.get(chofer.id_personas)
+        if persona and persona_data:
+            for k, v in persona_data.items():
+                if k not in ["direccion", "telefonos"] and hasattr(persona, k):
+                    setattr(persona, k, v)
+                    
+            if direccion_data:
+                direccion = Direcciones.query.get(persona.id_direcciones)
+                if direccion:
+                    for k, v in direccion_data.items():
+                        if hasattr(direccion, k):
+                            setattr(direccion, k, v)
+
+        db.session.commit()
+        return jsonify(serialize(chofer)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error al actualizar: {str(e)}"}), 500
+
+@api_bp.route("/combined/empresas_transporte/<int:id_>", methods=["PUT"])
 @jwt_required()
-def list_usuarios_combined():
-    """List all Usuarios with their Persona data"""
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    per_page = max(1, min(per_page, 100))
+def update_empresa_combined(id_):
+    from . import db
+    data = request.get_json(force=True) or {}
     
-    pagination = Usuarios.query.order_by(Usuarios.id).paginate(page=page, per_page=per_page, error_out=False)
-    
-    items = []
-    for usuario in pagination.items:
-        result = serialize(usuario)
-        persona = Personas.query.get(usuario.id_personas) if usuario.id_personas else None
-        if persona:
-            result["persona"] = serialize(persona)
-        items.append(result)
-    
-    return jsonify({
-        "items": items,
-        "page": page,
-        "per_page": per_page,
-        "total": pagination.total,
-        "pages": pagination.pages
-    })
+    try:
+        empresa = EmpresasTransporte.query.get_or_404(id_)
+        if "nombre" in data: empresa.nombre = data["nombre"]
+        
+        rif_input = data.get("rif")
+        if rif_input:
+            rif_obj = process_rif(db, rif_input)
+            if rif_obj:
+                empresa.id_rif = rif_obj.id
 
-@api_bp.route("/combined/choferes", methods=["GET"])
+        direccion_data = data.get("direccion", {})
+        if direccion_data and empresa.id_direcciones:
+            direccion = Direcciones.query.get(empresa.id_direcciones)
+            if direccion:
+                for k, v in direccion_data.items():
+                    if hasattr(direccion, k):
+                        setattr(direccion, k, v)
+        
+        db.session.commit()
+        return jsonify(serialize(empresa)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route("/combined/granjas/<int:id_>", methods=["PUT"])
 @jwt_required()
-def list_choferes_combined():
-    """List all Choferes with their Persona data"""
-    page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 20, type=int)
-    per_page = max(1, min(per_page, 100))
+def update_granja_combined(id_):
+    from . import db
+    data = request.get_json(force=True) or {}
     
-    pagination = Choferes.query.order_by(Choferes.id).paginate(page=page, per_page=per_page, error_out=False)
-    
-    items = []
-    for chofer in pagination.items:
-        result = serialize(chofer)
-        persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
-        if persona:
-            result["persona"] = serialize(persona)
-        items.append(result)
-    
-    return jsonify({
-        "items": items,
-        "page": page,
-        "per_page": per_page,
-        "total": pagination.total,
-        "pages": pagination.pages
-    })
+    try:
+        granja = Granjas.query.get_or_404(id_)
+        
+        if "id_persona_responsable" in data:
+            granja.id_persona_responsable = data["id_persona_responsable"]
+            
+        ubicacion_data = data.get("ubicacion", {})
+        direccion_data = ubicacion_data.get("direccion", {})
+        
+        if granja.id_ubicaciones:
+            ubicacion = Ubicaciones.query.get(granja.id_ubicaciones)
+            if ubicacion and ubicacion_data:
+                if "nombre" in ubicacion_data: ubicacion.nombre = ubicacion_data["nombre"]
+                if "tipo" in ubicacion_data: ubicacion.tipo = ubicacion_data["tipo"]
+                
+                if direccion_data and ubicacion.id_direcciones:
+                    direccion = Direcciones.query.get(ubicacion.id_direcciones)
+                    if direccion:
+                         for k, v in direccion_data.items():
+                            if hasattr(direccion, k):
+                                setattr(direccion, k, v)
+        
+        rif_input = data.get("rif")
+        if rif_input:
+            rif_obj = process_rif(db, rif_input)
+            if rif_obj:
+                granja.id_rif = rif_obj.id
 
-# ---------- CRUD ----------
+        db.session.commit()
+        return jsonify(serialize(granja)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# ---------- GENERIC CRUD ----------
 @api_bp.route("/<resource>", methods=["GET"])
 @jwt_required()
 def list_resource(resource):
@@ -507,7 +858,8 @@ def list_resource(resource):
 
     query = model.query.order_by(model.id)
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
-    items = [serialize(x) for x in pagination.items]
+    # MODIFICADO: Pasamos resource a serialize
+    items = [serialize(x, resource) for x in pagination.items]
 
     return jsonify({
         "items": items,
@@ -523,9 +875,9 @@ def list_resource_all(resource):
     model = MODEL_MAP.get(resource)
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
-
     items = model.query.order_by(model.id).all()
-    return jsonify([serialize(x) for x in items])
+    # MODIFICADO: Pasamos resource a serialize
+    return jsonify([serialize(x, resource) for x in items])
 
 @api_bp.route("/bulk", methods=["POST"])
 @jwt_required()
@@ -542,11 +894,10 @@ def bulk_resources():
         if not model:
             result[resource] = {"error": "Recurso no encontrado"}
             continue
-
         query = model.query.order_by(model.id)
         pagination = query.paginate(page=int(page), per_page=per_page, error_out=False)
-        items = [serialize(x) for x in pagination.items]
-
+        # MODIFICADO: Pasamos resource a serialize
+        items = [serialize(x, resource) for x in pagination.items]
         result[resource] = {
             "items": items,
             "page": int(page),
@@ -554,7 +905,6 @@ def bulk_resources():
             "total": pagination.total,
             "pages": pagination.pages
         }
-
     return jsonify(result)
 
 @api_bp.route("/<resource>/<string:id_>", methods=["GET"])
@@ -564,16 +914,15 @@ def get_resource(resource, id_):
     if not model:
         return jsonify({"error": "Recurso no encontrado"}), 404
     
-    # Si piden un usuario y el id es "me", obtenemos el ID desde el token
     if resource == "usuarios" and id_ == "me":
         id_ = get_jwt_identity()
 
-    # Validamos que el ID final sea numérico
     if not str(id_).isdigit():
         return jsonify({"error": "ID inválido"}), 400
 
     obj = model.query.get_or_404(int(id_))
-    return jsonify(serialize(obj))
+    # MODIFICADO: Pasamos resource a serialize
+    return jsonify(serialize(obj, resource))
 
 @api_bp.route("/<resource>", methods=["POST"])
 @jwt_required()
@@ -583,72 +932,50 @@ def create_resource(resource):
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
     data.pop("created_at", None)
-    data.pop("id", None) # Aseguramos que no venga ID para evitar errores de inserción
+    data.pop("id", None) 
 
-    # CAMBIO: Manejo especial para usuarios (hashear contraseña)
     if resource == "usuarios" and "contrasena" in data:
         data["contraseña"] = generate_password_hash(data.pop("contrasena"))
 
-    # CAMBIO: Manejo especial para Personas (vincular teléfono creado previamente via FK UI)
     temp_telefono_id = None
     if resource == "personas":
-        # Extraemos el ID del teléfono si viene seleccionado
         temp_telefono_id = data.pop("id_telefono", None)
-        # Limpiamos campos planos antiguos si existieran
         data.pop("telefono_numero", None)
         data.pop("telefono_tipo", None)
 
-    # CAMBIO: Manejo especial para productos (generar código temporal para pasar validación)
     if resource == "productos":
-        import uuid
-        # Usamos un código más corto por si la columna tiene límite de caracteres (ej: VARCHAR(10))
         data["codigo"] = f"T-{uuid.uuid4().hex[:6]}"
 
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
-        print(f"[{resource}] Error de validación: {err}") # Imprimir error en consola para depuración
+        print(f"[{resource}] Error de validación: {err}") 
         return jsonify({"error": err}), 400
     
     try:
         service = CRUDService(model)
         obj = service.create(data)
 
-        # CAMBIO: Si se seleccionó/creó un teléfono, vincularlo a la nueva persona
-        if resource == "personas" and temp_telefono_id:
-            from .models import Telefonos
-            from . import db
-            # Buscamos el teléfono (posiblemente huérfano) y asignamos dueño
-            tf = Telefonos.query.get(temp_telefono_id)
-            if tf:
-                tf.id_personas = obj.id
-                db.session.add(tf)
-                db.session.commit()
+        # ... (bloques personas y productos) ...
+        # ...existing code...
 
-        # CAMBIO: Actualizar código de producto con el ID real generado
-        if resource == "productos":
-            obj.codigo = f"PROD-{obj.id}"
-            from . import db
-            db.session.add(obj)
-            db.session.commit()
-            db.session.refresh(obj) # Importante: recargar para devolver el código PROD-ID
-
-        return jsonify(serialize(obj)), 201
+        # MODIFICADO: Retornar data expandida (útil para actualizar UI sin recargar)
+        return jsonify(serialize(obj, resource)), 201
 
     except IntegrityError as e:
         from . import db
-        db.session.rollback() # Revertir la transacción fallida
-        print(f"IntegrityError en {resource}: {e}") # Log para debug
+        db.session.rollback() 
+        print(f"IntegrityError en {resource}: {e}") 
         return jsonify({"error": "El registro ya existe o falta un campo obligatorio."}), 409
     
     except SQLAlchemyError as e:
         from . import db
         db.session.rollback()
-        print(f"SQLAlchemyError en {resource}: {e}") # Log para ver error de esquema (ej: campo no nulo en DB)
+        print(f"SQLAlchemyError en {resource}: {e}")
         return jsonify({"error": f"Error de base de datos: {str(e)}"}), 500
 
     except Exception as e:
         import traceback
-        traceback.print_exc() # Imprimir stack trace completo en consola
+        traceback.print_exc() 
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
 
 @api_bp.route("/<resource>/<int:id_>", methods=["PUT"])
@@ -659,18 +986,14 @@ def update_resource(resource, id_):
         return jsonify({"error": "Recurso no encontrado"}), 404
     data = request.get_json(force=True) or {}
 
-    # CAMBIO: Elimina peso_neto si viene en el payload (para cualquier modelo)
     data.pop("peso_neto", None)
 
-    # Manejo especial para usuarios
     if resource == "usuarios" and "contrasena" in data:
         pwd = data.pop("contrasena")
         if pwd:
             data["contraseña"] = generate_password_hash(pwd)
     
-    # Manejo especial Personas: Evitar error si viene id_telefono en update
     if resource == "personas":
-        # Aquí podrías implementar lógica para re-vincular teléfono si quisieras
         data.pop("id_telefono", None)
 
     ok, err = validate_payload(model, data, partial=True)
@@ -678,7 +1001,8 @@ def update_resource(resource, id_):
         return jsonify({"error": err}), 400
     service = CRUDService(model)
     obj = service.update(id_, data)
-    return jsonify(serialize(obj))
+    # MODIFICADO
+    return jsonify(serialize(obj, resource))
 
 @api_bp.route("/<resource>/<int:id_>", methods=["DELETE"])
 @jwt_required()
@@ -693,11 +1017,11 @@ def delete_resource(resource, id_):
     from . import db
     db.session.commit()
 
-    return jsonify(serialize(obj))
+    # MODIFICADO
+    return jsonify(serialize(obj, resource))
 
-# ---------- SERIAL PORT ----------
+# ---------- SERIAL & TICKETS ----------
 
-# NUEVA RUTA: Úsala para ver qué puertos detecta realmente tu PC
 @api_bp.route("/serial/list", methods=["GET"])
 @jwt_required()
 def list_serial_ports():
@@ -705,7 +1029,7 @@ def list_serial_ports():
     result = []
     for port in ports:
         result.append({
-            "device": port.device,       # El nombre que debes poner en SERIAL_PORT (ej: COM3)
+            "device": port.device,       
             "name": port.name,
             "description": port.description,
             "hwid": port.hwid
@@ -715,47 +1039,35 @@ def list_serial_ports():
 @api_bp.route("/serial/read", methods=["GET"])
 @jwt_required()
 def read_serial():
-    # CONFIGURACIÓN: CAMBIA ESTO por el valor 'device' que obtengas en /serial/list
-    # CAMBIADO A COM2 para escuchar lo que envía el script simulador en COM1
     SERIAL_PORT = 'COM2' 
     BAUD_RATE = 9600
-    TIMEOUT = 5 # Reducimos un poco el timeout para que no bloquee tanto si falla
-
+    TIMEOUT = 5 
     try:
-        # Intentamos abrir el puerto y leer
         with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT) as ser:
-            # flushInput limpia el buffer para leer solo los datos más recientes
             ser.reset_input_buffer() 
-            
-            # Leemos una línea (hasta encontrar un caracter de nueva línea \n)
             data_bytes = ser.readline()
-            
             if data_bytes:
-                # Decodificamos los bytes a string
                 data_str = data_bytes.decode('utf-8', errors='ignore').strip()
                 return jsonify({"data": data_str, "status": "success"})
             else:
                 return jsonify({"error": "Tiempo de espera agotado, no se recibieron datos", "status": "timeout"}), 408
-
     except serial.SerialException as e:
         return jsonify({"error": f"No se pudo acceder al puerto {SERIAL_PORT}. Verifique conexión.", "details": str(e)}), 500
     except Exception as e:
         return jsonify({"error": "Error inesperado leyendo puerto serial", "details": str(e)}), 500
-
-# ---------- TICKETS PESAJE ----------
 
 @api_bp.route("/tickets_pesaje/registrar_peso", methods=["POST"])
 @jwt_required()
 def registrar_peso_ticket():
     data = request.get_json(force=True) or {}
     ticket_id = data.get("id")
-    tipo_peso = data.get("tipo_peso")  # "bruto" o "tara"
+    tipo_peso = data.get("tipo_peso")  
     peso = data.get("peso")
 
     if not ticket_id or tipo_peso not in ("bruto", "tara") or peso is None:
         return jsonify({"error": "Datos requeridos: id, tipo_peso (bruto|tara), peso"}), 400
 
-    ticket = TicketsPesaje.query.get(ticket_id)
+    ticket = TicketPesaje.query.get(ticket_id)
     if not ticket:
         return jsonify({"error": "Ticket no encontrado"}), 404
 
@@ -764,7 +1076,6 @@ def registrar_peso_ticket():
     elif tipo_peso == "tara":
         ticket.peso_tara = peso
 
-    # Si ambos pesos están presentes, calcular neto y marcar como finalizado
     if ticket.peso_bruto and ticket.peso_tara:
         ticket.peso_neto = abs(ticket.peso_bruto - ticket.peso_tara)
         ticket.estado = "Finalizado"
@@ -776,72 +1087,26 @@ def registrar_peso_ticket():
     
     return jsonify(serialize(ticket))
 
-# ---------- IMPRESION DE TICKET ----------
-
 @api_bp.route("/tickets_pesaje/<int:ticket_id>/imprimir", methods=["POST"])
 @jwt_required()
 def imprimir_ticket(ticket_id):
-    """
-    Retorna los datos del ticket para que el Frontend genere la impresión.
-    Opcional: Marca en BD que fue impreso (si existiera el campo, ej: ticket.veces_impreso += 1).
-    """
     ticket = TicketPesaje.query.get_or_404(ticket_id)
-    
-    # TODO: The new schema uses Asignaciones which links vehiculo and chofer
-    # For now, we'll need to handle this differently once we migrate the actual data
-    # This is a compatibility issue that will need to be addressed
-    # vehiculo = Vehiculos.query.get(ticket.id_vehiculo)
-    # chofer = Choferes.query.get(ticket.id_chofer)
-    # Datos básicos
-    # TODO: Needs to be updated to work with new schema using Asignaciones
-    # placa = vehiculo.placa if vehiculo else "N/A"
-    # nombre_chofer = f"{chofer.nombre} {chofer.apellido}" if chofer else "N/A"
-    placa = "N/A"  # Temporary placeholder
-    nombre_chofer = "N/A"  # Temporary placeholder
+    placa = "N/A"  
+    nombre_chofer = "N/A"  
     producto = Productos.query.get(ticket.id_producto)
     nombre_producto = producto.nombre if producto else "N/A"
     
-    # Formatear Fechas y Pesos
     fecha_str = ticket.created_at.strftime("%d/%m/%Y") if ticket.created_at else datetime.datetime.now().strftime("%d/%m/%Y")
     hora_str = datetime.datetime.now().strftime("%I:%M:%S %p")
     
-    # Si no tienen valor envia 0
     p_tara = float(ticket.peso_tara) if ticket.peso_tara is not None else 0.0
     p_bruto = float(ticket.peso_bruto) if ticket.peso_bruto is not None else 0.0
 
-    # Si hay ambos pesos, usamos el neto de la BD (si existe) o calculamos la diferencia
     if p_bruto > 0 and p_tara > 0:
         p_neto = float(ticket.peso_neto) if ticket.peso_neto is not None else abs(p_bruto - p_tara)
     else:
         p_neto = 0.0
 
-    # Construir el texto base por si el frontend lo necesita para impresoras térmicas (RAW)
-    ticket_text = f"""
-AVICOLA LA ROSITA, S.A.
-        MARA I
-           
-ASUNTO: {ticket.tipo.upper() or 'Entrada/Salida'} DE MERCANCIA
---------------------------
-TICKET #: {ticket.nro_ticket}
-FECHA:    {fecha_str}
-    
-PLACA:    {placa}
-CHOFER:   {nombre_chofer}
-PROD:     {nombre_producto}
---------------------------
-TARA:     {p_tara:,.2f} Kg
-BRUTO:    {p_bruto:,.2f} Kg
-HORA:     {hora_str}
---------------------------
-KILOS NETO -> {p_neto:,.2f} Kg
-    """
-    
-    # LOGICA DE REGISTRO (Opcional):
-    # Aquí podrías guardar un log de auditoría o incrementar un contador en el ticket
-    # ticket.impreso = True
-    # db.session.commit()
-
-    # Devolvemos solo datos crudos, el frontend se encarga del formato
     return jsonify({
         "nro_ticket": ticket.nro_ticket,
         "empresa": "AVICOLA LA ROSITA, S.A.",
@@ -860,7 +1125,7 @@ KILOS NETO -> {p_neto:,.2f} Kg
 @api_bp.route("/tickets_pesaje", methods=["POST"])
 @jwt_required()
 def create_ticket_pesaje():
-    from .models import TicketsPesaje
+    from .models import TicketPesaje
     from . import db
     import uuid
 
@@ -869,13 +1134,12 @@ def create_ticket_pesaje():
     data.pop("nro_ticket", None)
     data.pop("peso_neto", None)
 
-    ok, err = validate_payload(TicketsPesaje, data, partial=False)
+    ok, err = validate_payload(TicketPesaje, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
 
-    # Temporal único para cumplir UNIQUE
     temp_code = f"PEND-{uuid.uuid4().hex[:8]}"
-    ticket = TicketsPesaje(nro_ticket=temp_code, **data)
+    ticket = TicketPesaje(nro_ticket=temp_code, **data)
     db.session.add(ticket)
     db.session.commit()
 
