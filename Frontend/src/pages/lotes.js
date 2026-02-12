@@ -183,6 +183,13 @@ async function showCreateForm() {
     return;
   }
 
+  // Formateador
+  const formatGranja = (g) => `${g.ubicacion?.nombre || "Granja " + g.id}`; // Sin ID visible, solo nombre
+
+  const dlGranjas = granjas
+    .map((g) => `<option value="${formatGranja(g)}"></option>`)
+    .join("");
+
   const html = `
         <form id="f-lote">
             <div class="form-group">
@@ -190,30 +197,26 @@ async function showCreateForm() {
                 <input type="text" id="l-codigo" placeholder="Ej. L-2024-01" required>
             </div>
             
-            <!-- NUEVO: Filtro de Granja -->
+            <!-- BUSCADOR GRANJA -->
             <div class="form-group">
-                <label>Filtrar Galpones por Granja (Opcional)</label>
-                <select id="l-granja-filter" style="width:100%; margin-bottom:5px;">
-                    ${granjaOptions}
-                </select>
+                <label>Filtrar Galpones por Granja (Buscar)</label>
+                <input list="dl-l-granjas" id="l-granja-input" placeholder="Escriba nombre de granja..." style="width:100%">
+                <datalist id="dl-l-granjas">${dlGranjas}</datalist>
+                <input type="hidden" id="l-granja-id">
             </div>
 
             <div class="form-group">
                 <label>Galpón de Destino</label>
+                <!-- Este se mantiene como SELECT porque se filtra dinámicamente y suelen ser pocos por granja -->
                 <select id="l-galpon" required disabled style="background-color:#eee">
-                    <option value="">Primero seleccione una granja</option>
+                    <option value="">Seleccione Granja primero...</option>
                 </select>
             </div>
-
+            
+            <!-- Resto de campos fecha y cantidad -->
             <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div>
-                    <label>Fecha Alojamiento</label>
-                    <input type="date" id="l-fecha" required>
-                </div>
-                <div>
-                    <label>Cantidad Inicial Aves</label>
-                    <input type="number" id="l-cantidad" min="1" placeholder="0" required>
-                </div>
+                <div><label>Fecha Alojamiento</label><input type="date" id="l-fecha" required></div>
+                <div><label>Cant. Aves</label><input type="number" id="l-cantidad" required></div>
             </div>
 
             <div class="modal-footer">
@@ -224,48 +227,55 @@ async function showCreateForm() {
     `;
 
   modal.show("Registrar Nuevo Lote", html, (box) => {
-    const selectGranja = box.querySelector("#l-granja-filter");
+    const inputGranja = box.querySelector("#l-granja-input");
     const selectGalpon = box.querySelector("#l-galpon");
 
-    // Lógica para filtrar galpones al cambiar granja
-    selectGranja.onchange = () => {
-      const granjaId = selectGranja.value;
+    // Evento Change del Input Buscador
+    inputGranja.onchange = () => {
+      const val = inputGranja.value;
+      const match = granjas.find((g) => formatGranja(g) === val); // Match con nombre limpio
       selectGalpon.innerHTML = '<option value="">Seleccione Galpón...</option>';
-      selectGalpon.disabled = false;
-      selectGalpon.style.backgroundColor = "";
+      selectGalpon.disabled = true;
+      selectGalpon.style.backgroundColor = "#eee";
 
-      if (!granjaId) {
-        selectGalpon.innerHTML =
-          '<option value="">Primero seleccione una granja</option>';
-        selectGalpon.disabled = true;
-        return;
-      }
+      if (match) {
+        const granjaId = match.id;
+        // Filtrar y activar
+        const misGalpones = galpones.filter((g) => {
+          const gId = g.id_granjas || (g.granja ? g.granja.id : null);
+          return gId == granjaId;
+        });
 
-      // Filtrar galpones en memoria
-      const galponesFiltrados = galpones.filter((g) => {
-        const gId = g.id_granjas || (g.granja ? g.granja.id : null);
-        return gId == granjaId;
-      });
-
-      if (galponesFiltrados.length > 0) {
-        selectGalpon.innerHTML += galponesFiltrados
-          .map(
-            (g) =>
-              `<option value="${g.id}">Galpón #${g.nro_galpon} (Cap: ${g.capacidad})</option>`,
-          )
-          .join("");
-      } else {
-        selectGalpon.innerHTML =
-          '<option value="">Sin galpones registrados en esta granja</option>';
+        if (misGalpones.length > 0) {
+          selectGalpon.disabled = false;
+          selectGalpon.style.backgroundColor = "#fff";
+          selectGalpon.innerHTML += misGalpones
+            .map(
+              (g) =>
+                `<option value="${g.id}">Galpón #${g.nro_galpon} (${g.capacidad})</option>`,
+            )
+            .join("");
+          // Auto focus al select para fluidez
+          selectGalpon.focus();
+        } else {
+          selectGalpon.innerHTML =
+            "<option>No hay galpones en esta granja</option>";
+        }
       }
     };
 
     box.querySelector("#btn-cancel").onclick = () => modal.hide();
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
+      // Validar galpon
+      if (!selectGalpon.value) {
+        alert("Selecciona un galpón");
+        return;
+      }
+
       const payload = {
         codigo_lote: document.getElementById("l-codigo").value,
-        id_galpones: parseInt(document.getElementById("l-galpon").value),
+        id_galpones: parseInt(selectGalpon.value), // Valor final
         fecha_alojamiento: document.getElementById("l-fecha").value,
         cantidad_aves: parseInt(document.getElementById("l-cantidad").value),
       };

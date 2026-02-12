@@ -4,6 +4,8 @@ import {
   deleteResource,
   getUserInfo,
 } from "../api.js"; // IMPORTAR getUserInfo
+import { modal } from "../components/Modal.js";
+import { COUNTRY_CODES } from "../utils.js";
 
 export async function init(container) {
   // 1. Verificar Rol

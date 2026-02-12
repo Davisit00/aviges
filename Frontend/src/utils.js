@@ -26,6 +26,7 @@ export const ENDPOINTS = {
   COMBINED_EMPRESAS: "/combined/empresas_transporte",
   COMBINED_GRANJAS: "/combined/granjas",
   COMBINED_LOTES: "/combined/lotes",
+  COMBINED_UBICACIONES: "/combined/ubicaciones", // NUEVO
 
   // Hardware / Específicas
   SERIAL_READ: "/serial/read",

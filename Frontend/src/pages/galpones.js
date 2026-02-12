@@ -170,20 +170,18 @@ function showCreateModal() {
     return;
   }
 
-  const granjaOpts = globalGranjas
-    .map(
-      (g) =>
-        `<option value="${g.id}">${g.ubicacion?.nombre || "ID: " + g.id}</option>`,
-    )
+  // Datalist options
+  const dlOpts = globalGranjas
+    .map((g) => `<option value="${g.ubicacion?.nombre} [ID:${g.id}]"></option>`)
     .join("");
 
   const html = `
         <form id="f-galpon">
             <div class="form-group">
                 <label>Granja</label>
-                <select id="fg-granja" required style="width:100%">
-                    ${granjaOpts}
-                </select>
+                <input list="dl-granjas-g" id="fg-granja-input" placeholder="Buscar granja..." required style="width:100%">
+                <datalist id="dl-granjas-g">${dlOpts}</datalist>
+                <input type="hidden" id="fg-granja-hidden">
             </div>
             <div class="form-group">
                 <label>Número Identificador Galpón</label>
@@ -201,12 +199,28 @@ function showCreateModal() {
     `;
 
   modal.show("Nuevo Galpón", html, (box) => {
+    // Lógica Datalist
+    const inputG = box.querySelector("#fg-granja-input");
+    inputG.onchange = () => {
+      const val = inputG.value;
+      const match = globalGranjas.find(
+        (g) => `${g.ubicacion?.nombre} [ID:${g.id}]` === val,
+      );
+      document.getElementById("fg-granja-hidden").value = match ? match.id : "";
+    };
+
     box.querySelector("#btn-c").onclick = () => modal.hide();
 
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
+      const gId = document.getElementById("fg-granja-hidden").value;
+      if (!gId) {
+        alert("Seleccione una granja válida de la lista.");
+        return;
+      }
+
       const p = {
-        id_granja: parseInt(box.querySelector("#fg-granja").value),
+        id_granjas: parseInt(gId), // Corregido key según backend models.py (id_granjas)
         nro_galpon: parseInt(box.querySelector("#fg-nro").value),
         capacidad: parseInt(box.querySelector("#fg-cap").value),
       };

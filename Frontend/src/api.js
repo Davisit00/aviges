@@ -82,6 +82,10 @@ export const updateGranjaCombined = (id, data) =>
 export const createLoteCombined = (data) =>
   api.post(ENDPOINTS.COMBINED_LOTES, data);
 
+// Ubicaciones Combinadas (NUEVO)
+export const createUbicacionCombined = (data) =>
+  api.post(ENDPOINTS.COMBINED_UBICACIONES, data);
+
 // --- Hardware / Específicas de Tickets ---
 export const getSerialList = () => api.get(ENDPOINTS.SERIAL_LIST);
 

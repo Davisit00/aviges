@@ -692,6 +692,47 @@ def create_lote_combined():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# NUEVO ENDPOINT PARA UBICACIONES
+@api_bp.route("/combined/ubicaciones", methods=["POST"])
+@jwt_required()
+def create_ubicacion_combined():
+    from . import db
+    data = request.get_json(force=True) or {}
+    
+    try:
+        direccion_data = data.pop("direccion", {})
+        
+        # Validations
+        if not data.get("nombre"):
+             return jsonify({"error": "El nombre de la ubicación es requerido"}), 400
+        if not data.get("tipo"):
+             return jsonify({"error": "El tipo de ubicación es requerido"}), 400
+        
+        # 1. Create Direccion
+        # Validamos minimos de dirección si es necesario, o dejamos que SQL se queje
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+
+        # 2. Create Ubicacion
+        data["id_direcciones"] = direccion.id
+        ubicacion = Ubicaciones(**data)
+        db.session.add(ubicacion)
+        
+        db.session.commit()
+        
+        return jsonify({
+            "ubicacion": serialize(ubicacion),
+            "direccion": serialize(direccion)
+        }), 201
+        
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error de integridad: {e.orig}"}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
 # ---------- UPDATE (PUT) COMBINED ----------
 
 @api_bp.route("/combined/usuarios/<int:usuario_id>", methods=["PUT"])
