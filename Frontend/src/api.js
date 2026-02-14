@@ -96,3 +96,14 @@ export const printTicket = (id) =>
 
 export const registerWeigh = (data) =>
   api.post(`${ENDPOINTS.TICKETS_PESAJE}/registrar_peso`, data);
+
+// Guardar nota de entrega (POST)
+export const saveNotaEntrega = (ticketId, data) =>
+  api.post(
+    `${ENDPOINTS.TICKETS_PESAJE_NOTA_ENTREGA}/${ticketId}/nota_entrega`,
+    data,
+  );
+
+// Obtener nota de entrega (GET)
+export const getNotaEntrega = (ticketId) =>
+  api.get(`${ENDPOINTS.TICKETS_PESAJE_NOTA_ENTREGA}/${ticketId}/nota_entrega`);

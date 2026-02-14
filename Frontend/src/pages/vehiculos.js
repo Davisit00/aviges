@@ -6,7 +6,9 @@ import {
   createEmpresaCombined,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js";
 
+let allItems = [];
 let userRole = 2; // Default Operador
 
 export async function init(container) {
@@ -19,14 +21,15 @@ export async function init(container) {
         <h2>Vehículos</h2>
         <button id="add-btn" class="btn-primary">Registrar Vehículo</button>
     </div>
+    ${getSearchInputHTML("search-veh", "Placa o Empresa...")}
     <div class="table-container">
-        <table>
+        <!-- Agregamos ID a la tabla para consistencia, aunque usaremos el ID del tbody -->
+        <table id="vehiculos-table">
             <thead>
                 <tr>
                     <th>Placa</th>
                     <th>Empresa</th>
-                    ${isAdmin ? "<th>Fecha Reg.</th>" : ""}
-                    ${isAdmin ? "<th>Acciones</th>" : ""}
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody id="v-body"></tbody>
@@ -34,113 +37,64 @@ export async function init(container) {
     </div>
   `;
   document.getElementById("add-btn").onclick = showCreateModal;
-  load();
+  loadData();
 }
 
-const load = async () => {
-  const b = document.getElementById("v-body");
-  b.innerHTML = "<tr><td colspan='4'>Cargando...</td></tr>";
+const loadData = async () => {
   try {
     const res = await listResource("vehiculos");
-    const items = res.data.items || res.data;
-    const isAdmin = userRole === 1;
+    allItems = res.data.items || res.data;
 
-    b.innerHTML = items
-      .map((v) => {
-        const dateStr = v.created_at
-          ? new Date(v.created_at).toLocaleDateString()
-          : "-";
+    setupSearchListener("search-veh", allItems, renderTable, [
+      "placa",
+      "empresa.nombre",
+    ]);
 
-        return `
-        <tr>
-            <td><strong>${v.placa}</strong></td>
-            <td>${v.empresa ? v.empresa.nombre : "N/A"}</td>
-            ${isAdmin ? `<td><small>${dateStr}</small></td>` : ""}
-            ${isAdmin ? `<td><button class="del-btn danger" data-id="${v.id}">Eliminar</button></td>` : ""}
-        </tr>`;
-      })
-      .join("");
-
-    if (isAdmin) {
-      document.querySelectorAll(".del-btn").forEach((btn) => {
-        btn.onclick = async (e) => {
-          if (confirm("Eliminar vehiculo?")) {
-            await deleteResource("vehiculos", e.target.dataset.id);
-            load();
-          }
-        };
-      });
-    }
-  } catch (e) {
-    b.innerHTML = "<tr><td colspan='4'>Error</td></tr>";
+    renderTable(allItems);
+  } catch (err) {
+    console.error("Error loading data:", err);
   }
 };
 
-// Función auxiliar para modal de creación rápida de empresa
-function showQuickCreateEmpresa(onSuccess) {
-  const html = `
-        <form id="f-quick-empresa">
-            <div class="form-group"><label>Nombre Empresa</label><input type="text" id="qe-nombre" required></div>
-            <div class="form-group"><label>RIF</label><input type="text" id="qe-rif" placeholder="J-123456" required></div>
-            <div class="form-group"><label>Teléfono</label><input type="text" id="qe-telf" required></div>
-            <div class="modal-footer">
-                <button type="submit" class="btn-primary">Guardar Rápido</button>
-            </div>
-        </form>`;
+function renderTable(items) {
+  // CORRECCIÓN 1: Usar getElementById con el ID correcto definido en init ('v-body')
+  const tbody = document.getElementById("v-body");
+  if (!tbody) return;
 
-  // Necesitamos un mecanismo para superponer modales o reemplazar contenido temporarlmente
-  // Como el componente modal actual es simple, guardamos el contenido previo
-  const prevContent = document.querySelector(".modal-content").innerHTML;
-  const prevTitle = document.querySelector(".modal-header h3").innerText;
+  if (items.length === 0) {
+    tbody.innerHTML =
+      "<tr><td colspan='3' style='text-align:center'>No hay registros</td></tr>";
+    return;
+  }
 
-  modal.show("Nueva Empresa (Rápido)", html, (box) => {
-    box.querySelector("form").onsubmit = async (e) => {
-      e.preventDefault();
-      // Payload simplificado para creación rápida
-      const p = {
-        nombre: document.getElementById("qe-nombre").value,
-        rif: {
-          tipo: "J",
-          numero: document.getElementById("qe-rif").value.replace(/\D/g, ""),
-        }, // Simplificado
-        direccion: {
-          pais: "Venezuela",
-          estado: "N/A",
-          municipio: "N/A",
-          descripcion: "Registro Rápido",
-        },
-        telefonos: [
-          {
-            tipo: "Celular",
-            codigo_pais: "+58",
-            operadora: "000",
-            numero: document.getElementById("qe-telf").value,
-          },
-        ],
+  const isAdmin = userRole === 1;
+
+  tbody.innerHTML = items
+    .map((v) => {
+      const empName = v.empresa ? v.empresa.nombre : "N/A";
+
+      return `
+        <tr>
+            <td>${v.placa}</td>
+            <td>${empName}</td>
+            <td>
+             ${isAdmin ? `<button class="btn-delete danger" data-id="${v.id}">Eliminar</button>` : "-"}
+            </td>
+        </tr>`;
+    })
+    .join("");
+
+  if (isAdmin) {
+    tbody.querySelectorAll(".btn-delete").forEach((btn) => {
+      btn.onclick = async (e) => {
+        if (confirm("¿Eliminar vehículo?")) {
+          await deleteResource("vehiculos", e.target.dataset.id);
+          loadData(); // CORRECCIÓN 2: Llamar a loadData() en lugar de load()
+        }
       };
-      try {
-        const res = await createEmpresaCombined(p);
-        const newEmpresa = res.data.empresa || res.data;
-        // Restaurar modal anterior
-        modal.show(prevTitle, prevContent, (restoredBox) => {
-          // Re-atar eventos del formulario original...
-          // *Nota: Esto es complejo en vanilla JS simple.
-          // Estrategia alternativa: Cerrar y devolver datos al caller
-        });
-        alert(
-          "Empresa creada. Por favor vuelva a abrir el formulario de vehículo.",
-        );
-        modal.hide();
-        onSuccess(); // Recargar tabla de fondo
-      } catch (err) {
-        alert("Error: " + err.message);
-      }
-    };
-  });
+    });
+  }
 }
-// NOTA: Dada la complejidad de modales anidados en vanilla JS sin gestor de estado,
-// cambiaremos la estrategia a: DATALIST + Botón que abre otra pestaña o alerta.
-// Mejor aún: Usar un Datalist filtrable.
 
 const showCreateModal = async () => {
   let empresas = [];
@@ -222,7 +176,7 @@ const showCreateModal = async () => {
     const sectionNew = box.querySelector("#section-new");
     const inputSearch = box.querySelector("#v-empresa-input");
 
-    // Estado interno para saber qué modo usar al guardar
+    // Estado interno
     let isCreatingNew = false;
 
     // Función para cambiar visibilidad
@@ -309,7 +263,7 @@ const showCreateModal = async () => {
         });
 
         modal.hide();
-        load();
+        loadData(); // CORRECCIÓN 3: Llamar a loadData() al terminar
       } catch (err) {
         console.error(err);
         alert("Error: " + (err.response?.data?.error || err.message));

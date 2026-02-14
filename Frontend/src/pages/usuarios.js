@@ -1,11 +1,15 @@
 import {
   listResource,
-  createUsuarioCombined,
+  createResource,
   deleteResource,
   getUserInfo,
-} from "../api.js"; // IMPORTAR getUserInfo
+  updateResource,
+} from "../api.js"; // IMPORTAR
 import { modal } from "../components/Modal.js";
-import { COUNTRY_CODES } from "../utils.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js"; // <--- IMPORTAR
+
+let allItems = []; // <--- GLOBAL DATA
+let isAdmin = false;
 
 export async function init(container) {
   // 1. Verificar Rol
@@ -17,20 +21,25 @@ export async function init(container) {
     return;
   }
 
+  isAdmin = true;
+
   container.innerHTML = `
     <div class="header-section">
       <h2>Gestión de Usuarios</h2>
-      <button id="btn-create" class="btn-primary">Nuevo Usuario</button>
+      <button id="btn-create" class="btn-primary">Crear Usuario</button>
     </div>
+    
+    ${getSearchInputHTML("search-usuarios", "Buscar usuario, nombre, cédula...")} <!-- INPUT -->
+
     <div class="table-container">
-      <table id="data-table">
+      <table id="user-table">
         <thead>
           <tr>
             <th>Usuario</th>
-            <th>Nombre Completo</th>
-            <th>Cédula</th>
+            <th>Nombre</th>
             <th>Rol</th>
-            <th>Acciones</th>
+            <th>Teléfono</th>
+            ${isAdmin ? "<th>Acciones</th>" : ""}
           </tr>
         </thead>
         <tbody></tbody>
@@ -38,46 +47,70 @@ export async function init(container) {
     </div>
   `;
 
-  document.getElementById("btn-create").onclick = () => showForm();
-  await loadData();
+  document.getElementById("btn-create").onclick = showForm;
+  loadTable();
 }
 
-async function loadData() {
-  const tbody = document.querySelector("#data-table tbody");
-  tbody.innerHTML = '<tr><td colspan="5">Cargando...</td></tr>';
-
+async function loadTable() {
+  const tbody = document.querySelector("#user-table tbody");
+  tbody.innerHTML = "<tr><td colspan='5'>Cargando...</td></tr>";
   try {
-    // CAMBIO: Solo pedimos usuarios, ya vienen con datos anidados
     const res = await listResource("usuarios");
-    const users = res.data.items || res.data;
+    allItems = res.data.items || res.data;
 
-    tbody.innerHTML = "";
-    users.forEach((u) => {
+    // SETUP BUSCADOR
+    setupSearchListener("search-usuarios", allItems, renderTable, [
+      "usuario",
+      "persona.nombre",
+      "persona.apellido",
+      "persona.cedula",
+    ]);
+
+    renderTable(allItems);
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = "<tr><td colspan='5'>Error</td></tr>";
+  }
+}
+
+// NUEVA FUNCIÓN RENDER
+function renderTable(items) {
+  const tbody = document.querySelector("#user-table tbody");
+  if (!items.length) {
+    tbody.innerHTML = "<tr><td colspan='5'>Sin resultados</td></tr>";
+    return;
+  }
+
+  tbody.innerHTML = items
+    .map((user) => {
       // Acceso directo a objetos anidados
-      const p = u.persona || {};
-      const r = u.rol || {}; // Antes era un ID, ahora es objeto {id, nombre}
+      const p = user.persona || {};
+      const r = user.rol || {};
+      const actionButtons = isAdmin
+        ? `<td><button class='btn-edit' data-id='${user.id}'>Editar</button> <button class='btn-delete danger' data-id='${user.id}'>Eliminar</button></td>`
+        : "";
+      return `
+        <tr>
+          <td>${user.usuario}</td>
+          <td>${p.nombre || ""} ${p.apellido || ""}</td>
+          <td>${r.nombre || "N/A"}</td>
+          <td>${(p.telefonos?.[0]?.codigo_pais || "") + " " + (p.telefonos?.[0]?.operadora || "") + "-" + (p.telefonos?.[0]?.numero || "") || "N/A"}</td>
+          ${actionButtons}
+        </tr>`;
+    })
+    .join("");
 
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${u.usuario}</td>
-        <td>${p.nombre || "N/A"} ${p.apellido || ""}</td>
-        <td>${p.tipo_cedula || ""}-${p.cedula || "N/A"}</td>
-        <td>${r.nombre || "Sin Rol"}</td> <!-- Muestra nombre del rol -->
-        <td>
-            <button class="btn-delete danger" data-id="${u.id}">Eliminar</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
-
+  // Re-bind eventos
+  if (isAdmin) {
     tbody
       .querySelectorAll(".btn-delete")
       .forEach((b) => (b.onclick = (e) => deleteItem(e.target.dataset.id)));
-  } catch (err) {
-    console.error(err);
-    tbody.innerHTML = '<tr><td colspan="5">Error cargando datos</td></tr>';
+    tbody
+      .querySelectorAll(".btn-edit")
+      .forEach((b) => (b.onclick = (e) => showForm(e.target.dataset.id)));
   }
 }
+// ... resto del archivo
 
 async function showForm() {
   // Cargar Roles

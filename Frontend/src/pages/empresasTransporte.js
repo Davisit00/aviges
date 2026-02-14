@@ -1,12 +1,19 @@
 import {
   listResource,
-  createEmpresaCombined,
+  createResource,
+  updateResource,
   deleteResource,
   getUserInfo,
+  createEmpresaCombined,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
-import { COUNTRY_CODES } from "../utils.js";
+import {
+  getSearchInputHTML,
+  setupSearchListener,
+  COUNTRY_CODES,
+} from "../utils.js";
 
+let allItems = [];
 let isAdmin = false;
 
 export async function init(container) {
@@ -18,6 +25,7 @@ export async function init(container) {
       <h2>Empresas de Transporte</h2>
       <button id="btn-create" class="btn-primary">Nueva Empresa</button>
     </div>
+    ${getSearchInputHTML("search-emp", "Buscar por Nombre o RIF")}
     <div class="table-container">
       <table id="data-table">
         <thead>
@@ -25,7 +33,7 @@ export async function init(container) {
             <th>Nombre</th>
             <th>RIF</th>
             <th>Ubicación</th>
-            ${isAdmin ? "<th>Dirección Exacta</th>" : ""} <!-- Solo Admin -->
+            ${isAdmin ? "<th>Dirección Exacta</th>" : ""} 
             <th>Teléfono</th>
             ${isAdmin ? "<th>Acciones</th>" : ""}
           </tr>
@@ -36,16 +44,31 @@ export async function init(container) {
   `;
 
   document.getElementById("btn-create").onclick = () => showForm();
-  loadData();
+  loadTable();
 }
 
-async function loadData() {
-  const tbody = document.querySelector("#data-table tbody");
-  tbody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
-  try {
-    const res = await listResource("empresas_transporte");
-    const items = res.data.items || res.data;
+async function loadTable() {
+  const res = await listResource("empresas_transporte");
+  allItems = res.data.items || res.data;
 
+  setupSearchListener("search-emp", allItems, renderTable, (item, term) => {
+    const rif = item.rif ? `${item.rif.tipo}-${item.rif.numero}` : "";
+    return (
+      item.nombre.toLowerCase().includes(term) ||
+      rif.toLowerCase().includes(term)
+    );
+  });
+
+  renderTable(allItems);
+}
+
+function renderTable(items) {
+  const tbody = document.querySelector("#data-table tbody");
+  if (!tbody) return; // Validación extra
+
+  tbody.innerHTML = '<tr><td colspan="6">Cargando...</td></tr>';
+
+  try {
     tbody.innerHTML = "";
     items.forEach((e) => {
       const rifStr = e.rif ? `${e.rif.tipo}-${e.rif.numero}` : "N/A";
@@ -69,7 +92,7 @@ async function loadData() {
         `;
 
       if (isAdmin) {
-        html += `<td><small>${dir.descripcion || ""}</small></td>`; // Columna extra admin
+        html += `<td><small>${dir.descripcion || ""}</small></td>`;
       }
 
       html += `<td>${telf}</td>`;
@@ -88,7 +111,7 @@ async function loadData() {
           (b.onclick = async (e) => {
             if (confirm("¿Borrar?")) {
               await deleteResource("empresas_transporte", e.target.dataset.id);
-              loadData();
+              loadTable(); // <--- CORRECCIÓN: loadTable() en vez de loadData()
             }
           }),
       );
@@ -125,7 +148,7 @@ function showForm() {
       </div>
       <!-- Telefono con Select de Pais -->
       <div class="form-group">
-            <label>Teléfono Máster</label>
+            <label>Teléfono</label>
             <div style="display:flex; gap:5px;">
                 <select id="e-ph-tipo" style="width:90px">
                     <option value="Trabajo">Trabajo</option>
@@ -142,11 +165,12 @@ function showForm() {
       <!-- Direccion -->
       <div class="form-group">
         <label>Dirección Fiscal</label>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
+        <div style="display:grid; width:100%; grid-template-columns: 1fr 1fr; gap:5px; margin-bottom:5px;">
             <input type="text" id="e-estado" placeholder="Estado" required>
             <input type="text" id="e-municipio" placeholder="Municipio" required>
+            <input type="text" id="e-sector" placeholder="Sector" required style="grid-column: span 2;">
         </div>
-        <input type="text" id="e-desc" placeholder="Avenida / Calle / Edificio" required>
+        <input type="text" id="e-desc" placeholder="Avenida / Calle / Edificio" required style="width:100%; margin-top:5px;">
       </div>
 
       <div class="modal-footer">
@@ -170,7 +194,7 @@ function showForm() {
           pais: "Venezuela",
           estado: document.getElementById("e-estado").value,
           municipio: document.getElementById("e-municipio").value,
-          sector: "Centro",
+          sector: document.getElementById("e-sector").value,
           descripcion: document.getElementById("e-desc").value,
         },
         telefonos: [
@@ -184,10 +208,9 @@ function showForm() {
       };
 
       try {
-        // CAMBIO: Usar la función importada
         await createEmpresaCombined(payload);
         modal.hide();
-        loadData();
+        loadTable(); // <--- CORRECCIÓN: loadTable() en vez de loadData()
       } catch (err) {
         console.error(err);
         alert("Error al guardar empresa");

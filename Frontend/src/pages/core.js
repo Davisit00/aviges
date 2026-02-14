@@ -9,6 +9,7 @@ import { init as initChoferes } from "./choferes.js";
 import { init as initLotes } from "./lotes.js";
 import { init as initWelcome } from "./welcome.js";
 import { init as initUbicaciones } from "./ubicaciones.js"; // IMPORTA EL NUEVO ARCHIVO
+import { init as initTickets } from "./ticketsPesaje.js"; // IMPORTA EL NUEVO ARCHIVO
 
 // Constante para la clave del storage
 const STORAGE_KEY_VIEW = "aviges_active_view";
@@ -25,6 +26,7 @@ const VIEW_MAP = {
   choferes: initChoferes,
   lotes: initLotes,
   ubicaciones: initUbicaciones, // REGISTRAR AQUI
+  tickets: initTickets, // REGISTRAR AQUI
 };
 
 let currentUserRole = null;
@@ -55,7 +57,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const btnUsuarios = document.getElementById("users-button");
   const btnLotes = document.getElementById("lot-button");
   const btnUbicaciones = document.getElementById("ubicaciones-button"); // NUEVO BOTON
-  const btnTickets = document.getElementById("tickets-button");
+  const btnTickets = document.getElementById("tickets-button"); // NUEVO BOTON
   const btnLogout = document.getElementById("logout-button");
 
   // Elemento Logo/Título
@@ -120,6 +122,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (btnGalpones) btnGalpones.onclick = () => navigate("galpones");
   if (btnLotes) btnLotes.onclick = () => navigate("lotes");
   if (btnUbicaciones) btnUbicaciones.onclick = () => navigate("ubicaciones"); // CONECTAR
+  if (btnTickets) btnTickets.onclick = () => navigate("tickets"); // CONECTAR
 
   // NUEVO: Click en el logo carga 'welcome'
   if (logoContainer) {

@@ -5,7 +5,9 @@ import {
   getUserInfo,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js";
 
+let allItems = []; // <--- CORRECCIÓN 1: Agregar variable global
 let isAdmin = false;
 
 export async function init(container) {
@@ -16,6 +18,8 @@ export async function init(container) {
         <div class="header-section">
             <h2>Lotes de Aves</h2>
             <button id="btn-add" class="btn-primary">Registrar Lote</button>
+            
+        ${getSearchInputHTML("search-lote", "Código Lote, Granja, Galpón...")}
         </div>
         <!-- Filtro por Granja -->
         <div class="filters" style="margin-bottom: 15px; display:flex; gap:10px; align-items:center;">
@@ -30,7 +34,7 @@ export async function init(container) {
                     <tr>
                         ${isAdmin ? "<th>ID</th>" : ""}
                         <th>Código</th>
-                        <th>Galpón</th>
+                        <th>Ubicación (Galpón - Granja)</th>
                         <th>Fecha Alojamiento</th>
                         <th>Cant. Aves</th>
                         ${isAdmin ? "<th>Acción</th>" : ""}
@@ -84,53 +88,31 @@ async function loadTable() {
 
   try {
     const res = await listResource("lotes");
-    let items = res.data.items || res.data;
+    allItems = res.data.items || res.data;
 
     // --- APLICAR FILTRO ---
     // Convertimos a string para asegurar compatibilidad estricta
     if (filterId && filterId !== "") {
-      items = items.filter((l) => {
+      allItems = allItems.filter((l) => {
         // Navegar con seguridad: lote -> galpon -> granja -> id
         const granjaId = l.galpon?.granja?.id || l.galpon?.id_granjas;
         return granjaId == filterId;
       });
     }
 
-    if (items.length === 0) {
+    if (allItems.length === 0) {
       tbody.innerHTML =
         '<tr><td colspan="6" style="text-align:center;">No se encontraron registros</td></tr>';
       return;
     }
 
-    tbody.innerHTML = items
-      .map((l) => {
-        const nroGalpon = l.galpon ? l.galpon.nro_galpon : "S/D";
-        const nombreGranja =
-          l.galpon && l.galpon.granja && l.galpon.granja.ubicacion
-            ? l.galpon.granja.ubicacion.nombre
-            : "Desconocida";
+    setupSearchListener("search-lote", allItems, renderTable, [
+      "codigo_lote",
+      "galpon.granja.ubicacion.nombre",
+      "galpon.nro_galpon",
+    ]);
 
-        let fechaStr = "-";
-        if (l.fecha_alojamiento) {
-          // Manejo de zona horaria simple
-          fechaStr = new Date(l.fecha_alojamiento).toISOString().split("T")[0];
-        }
-
-        const btnDelete = isAdmin
-          ? `<td><button class="btn-delete danger" data-id="${l.id}">Eliminar</button></td>`
-          : "";
-
-        return `
-            <tr>
-                ${isAdmin ? `<td><small>#${l.id}</small></td>` : ""}
-                <td><strong>${l.codigo_lote}</strong></td>
-                <td>Galpón ${nroGalpon} <small style="color:#666">(${nombreGranja})</small></td>
-                <td>${fechaStr}</td>
-                <td>${l.cantidad_aves}</td>
-                ${btnDelete}
-            </tr>`;
-      })
-      .join("");
+    renderTable(allItems);
 
     if (isAdmin) {
       tbody.querySelectorAll(".btn-delete").forEach(
@@ -146,6 +128,54 @@ async function loadTable() {
   } catch (error) {
     console.error(error);
     tbody.innerHTML = '<tr><td colspan="6">Error de conexión</td></tr>';
+  }
+}
+
+// <--- CORRECCIÓN 2: AGREGAR ESTA FUNCIÓN FALTANTE
+function renderTable(items) {
+  const tbody = document.getElementById("l-body");
+  if (!tbody) return;
+
+  if (items.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center;">No se encontraron registros</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items
+    .map((l) => {
+      const galpon = l.galpon || {};
+      const granjaName = galpon.granja?.ubicacion?.nombre || "N/A";
+      const ubicacionStr = `Galpón ${galpon.nro_galpon || "?"} - ${granjaName}`;
+      const fecha = l.fecha_alojamiento
+        ? new Date(l.fecha_alojamiento).toLocaleDateString()
+        : "N/A";
+
+      let html = "";
+      if (isAdmin) html += `<td>${l.id}</td>`;
+      html += `
+            <td><strong>${l.codigo_lote}</strong></td>
+            <td>${ubicacionStr}</td>
+            <td>${fecha}</td>
+            <td>${l.cantidad_aves}</td>
+        `;
+      if (isAdmin) {
+        html += `<td><button class="btn-delete danger" data-id="${l.id}">Eliminar</button></td>`;
+      }
+      return `<tr>${html}</tr>`;
+    })
+    .join("");
+
+  // Reasignar eventos (debe estar dentro de renderTable para que funcione con el buscador)
+  if (isAdmin) {
+    tbody.querySelectorAll(".btn-delete").forEach((btn) => {
+      btn.onclick = async (e) => {
+        if (confirm("¿Eliminar lote?")) {
+          await deleteResource("lotes", e.target.dataset.id);
+          loadTable();
+        }
+      };
+    });
   }
 }
 
@@ -187,7 +217,10 @@ async function showCreateForm() {
   const formatGranja = (g) => `${g.ubicacion?.nombre || "Granja " + g.id}`; // Sin ID visible, solo nombre
 
   const dlGranjas = granjas
-    .map((g) => `<option value="${formatGranja(g)}"></option>`)
+    .map((g) => {
+      const nombre = g.ubicacion?.nombre || "Granja " + g.id;
+      return `<option value="${nombre}"></option>`;
+    })
     .join("");
 
   const html = `

@@ -985,7 +985,7 @@ def create_resource(resource):
         data.pop("telefono_tipo", None)
 
     if resource == "productos":
-        data["codigo"] = f"T-{uuid.uuid4().hex[:6]}"
+        data["codigo"] = f"PRD-{uuid.uuid4().hex[:6]}"
 
     ok, err = validate_payload(model, data, partial=False)
     if not ok:
@@ -1188,3 +1188,60 @@ def create_ticket_pesaje():
     db.session.commit()
 
     return jsonify(serialize(ticket)), 201
+
+@api_bp.route("/tickets_pesaje/<int:ticket_id>/nota_entrega", methods=["POST"])
+@jwt_required()
+def registrar_nota_entrega(ticket_id):
+    from . import db
+    data = request.get_json(force=True) or {}
+
+    # Validar ticket
+    ticket = TicketPesaje.query.get(ticket_id)
+    if not ticket:
+        return jsonify({"error": "Ticket no encontrado"}), 404
+
+    # Procesar Viajes_tiempos
+    tiempos_data = data.get("tiempos", {})
+    if tiempos_data:
+        tiempos = ViajesTiempos(id_ticket=ticket_id, **tiempos_data)
+        db.session.add(tiempos)
+
+    # Procesar Viajes_conteos
+    conteos_data = data.get("conteos", {})
+    if conteos_data:
+        conteos = ViajesConteos(id_ticket=ticket_id, **conteos_data)
+        db.session.add(conteos)
+
+    # Procesar Viajes_origen
+    origen_data = data.get("origen", {})
+    if origen_data:
+        origen = ViajesOrigen(id_ticket=ticket_id, **origen_data)
+        db.session.add(origen)
+
+    # Procesar Estadisticas
+    estadisticas_data = data.get("estadisticas", {})
+    if estadisticas_data:
+        estadisticas = Estadisticas(id_ticket=ticket_id, **estadisticas_data)
+        db.session.add(estadisticas)
+
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+@api_bp.route("/tickets_pesaje/<int:ticket_id>/nota_entrega", methods=["GET"])
+@jwt_required()
+def obtener_nota_entrega(ticket_id):
+    tiempos = ViajesTiempos.query.filter_by(id_ticket=ticket_id).first()
+    conteos = ViajesConteos.query.filter_by(id_ticket=ticket_id).first()
+    origen = ViajesOrigen.query.filter_by(id_ticket=ticket_id).first()
+    estadisticas = Estadisticas.query.filter_by(id_ticket=ticket_id).first()
+
+    def serialize(obj, name=None):
+        if not obj: return None
+        return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
+    return jsonify({
+        "tiempos": serialize(tiempos),
+        "conteos": serialize(conteos),
+        "origen": serialize(origen),
+        "estadisticas": serialize(estadisticas),
+    })

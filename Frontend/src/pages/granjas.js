@@ -5,66 +5,101 @@ import {
   getUserInfo,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
-import { COUNTRY_CODES } from "../utils.js"; // IMPORTAR
+import { COUNTRY_CODES } from "../utils.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js";
 
 let isAdmin = false;
+let allItems = [];
 
 export async function init(container) {
   const u = await getUserInfo();
   isAdmin = (u.data.rol.id || u.data.user_rol) === 1;
   container.innerHTML = `
-        <div class="header-section">
-            <h2>Granjas</h2>
-            <button id="new-granja" class="btn-primary">Nueva Granja</button>
-        </div>
-        <div id="granja-list" class="cards-grid"></div>
-    `;
+    <div class="header-section">
+      <h2>Granjas</h2>
+      <button id="new-granja" class="btn-primary">Nueva Granja</button>
+    </div>
+    ${getSearchInputHTML("search-granjas", "Buscar Granja...")}
+    <div class="table-container">
+      <table id="granjas-table">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>RIF</th>
+            <th>Ubicación</th>
+            <th>Ubicación Exacta</th>
+            <th>Responsable</th>
+            ${isAdmin ? "<th>Acciones</th>" : ""}
+          </tr>
+        </thead>
+        <tbody id="granjas-tbody"></tbody>
+      </table>
+    </div>
+  `;
   document.getElementById("new-granja").onclick = showCreateForm;
   load();
 }
 
 async function load() {
   const res = await listResource("granjas");
-  const items = res.data.items || res.data;
-  const div = document.getElementById("granja-list");
+  allItems = res.data.items || res.data;
 
-  if (items.length === 0) {
-    div.innerHTML = "<p>No hay granjas registradas.</p>";
+  setupSearchListener("search-granjas", allItems, renderTable, [
+    "ubicacion.nombre",
+    "ubicacion.direccion.estado",
+  ]);
+
+  renderTable(allItems);
+}
+
+function renderTable(items) {
+  const tbody = document.getElementById("granjas-tbody");
+  if (!tbody) return;
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 5 : 4}" style="text-align:center;">Sin resultados</td></tr>`;
     return;
   }
 
-  div.innerHTML = items
+  tbody.innerHTML = items
     .map((g) => {
       const ubi = g.ubicacion ? g.ubicacion.nombre : "Sin Nombre";
       const rif = g.rif ? `${g.rif.tipo}-${g.rif.numero}` : "S/R";
-      const estado = g.ubicacion?.direccion?.estado || "N/A";
-      const responsable = g.persona_responsable
-        ? `${g.persona_responsable.nombre} ${g.persona_responsable.apellido}`
+      const ubicacion =
+        (g.ubicacion?.direccion?.estado || "N/A") +
+        ", " +
+        (g.ubicacion?.direccion?.municipio || "N/A") +
+        ", " +
+        (g.ubicacion?.direccion?.sector || "N/A");
+      const ubicacion_exacta = g.ubicacion?.direccion?.descripcion || "N/A";
+      const responsable = g.responsable
+        ? `${g.responsable.nombre} ${g.responsable.apellido}`
         : "S/D";
 
-      let cardContent = `<h3>${ubi}</h3>`;
-      cardContent += `<p><strong>Estado:</strong> ${estado}</p>`;
-      cardContent += `<p><strong>Responsable:</strong> ${responsable}</p>`;
-
+      let row = `
+        <td>${ubi}</td>
+        <td>${rif}</td>
+        <td>${ubicacion}</td>
+        <td>${ubicacion_exacta}</td>
+        <td>${responsable}</td>
+      `;
       if (isAdmin) {
-        cardContent += `<p><small>RIF: ${rif}</small></p>`; // Dato tecnico solo admin
-        cardContent += `<button class="btn-delete danger" data-id="${g.id}">Eliminar</button>`;
+        row += `<td><button class="btn-delete danger" data-id="${g.id}">Eliminar</button></td>`;
       }
-
-      return `<div class="card">${cardContent}</div>`;
+      return `<tr>${row}</tr>`;
     })
     .join("");
 
+  // Asignar eventos de eliminar
   if (isAdmin) {
-    div.querySelectorAll(".btn-delete").forEach(
-      (b) =>
-        (b.onclick = async (e) => {
-          if (confirm("¿Borrar Granja?")) {
-            await deleteResource("granjas", e.target.dataset.id);
-            load();
-          }
-        }),
-    );
+    tbody.querySelectorAll(".btn-delete").forEach((b) => {
+      b.onclick = async (e) => {
+        if (confirm("¿Borrar Granja?")) {
+          await deleteResource("granjas", e.target.dataset.id);
+          load();
+        }
+      };
+    });
   }
 }
 
@@ -105,8 +140,9 @@ function showCreateForm() {
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
                 <input type="text" id="g-est" placeholder="Estado" required>
                 <input type="text" id="g-mun" placeholder="Municipio" required>
+                <input type="text" id="g-sec" placeholder="Sector" style="grid-column: span 2;" required>
             </div>
-            <input type="text" id="g-sec" placeholder="Sector" style="margin-top:5px; width:100%" required>
+             <input type="text" id="g-desc" placeholder="Descripción (Ej. Cerca del río...)" style="width:100%; margin-top:10px;">
         </div>
 
         <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
@@ -140,26 +176,24 @@ function showCreateForm() {
             estado: document.getElementById("g-est").value,
             municipio: document.getElementById("g-mun").value,
             sector: document.getElementById("g-sec").value,
-            descripcion: "Granja",
+            descripcion: document.getElementById("g-desc").value,
           },
         },
         rif: {
           tipo: document.getElementById("g-rif-tipo").value,
           numero: document.getElementById("g-rif-num").value,
         },
-        // NUEVO: Datos de persona anidados
         persona: {
           cedula: document.getElementById("resp-cedula").value,
           tipo_cedula: document.getElementById("resp-tipo-cedula").value,
           nombre: document.getElementById("resp-nombre").value,
           apellido: document.getElementById("resp-apellido").value,
-          // Agrega direccion/telefonos aqui si se requiriera guardar contacto PERSONAL del responsable
           direccion: {
             estado: "N/A",
             municipio: "N/A",
             sector: "N/A",
             pais: "Venezuela",
-          }, // Stub requerido por backend a veces
+          },
         },
         telefonos: [
           {

@@ -6,8 +6,10 @@ import {
   getMetadataEnums, // Importar para los enums
 } from "../api.js";
 import { modal } from "../components/Modal.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js";
 
 let isAdmin = false;
+let allItems = []; // Asegúrate de que esto también esté aquí
 
 // (Se eliminó la función createUbicacionCombined local y el import de axios)
 
@@ -19,6 +21,8 @@ export async function init(container) {
     <div class="header-section">
       <h2>Ubicaciones Generales</h2>
       <button id="btn-create" class="btn-primary">Nueva Ubicación</button>
+      
+    ${getSearchInputHTML("search-ubi", "Nombre, Tipo, Estado...")}
     </div>
     <div class="table-container">
       <table>
@@ -27,6 +31,8 @@ export async function init(container) {
                 <th>Nombre</th>
                 <th>Tipo</th>
                 <th>Estado / Lugar</th>
+                <th>Dirección</th>
+                <th>Sector / Detalle</th>
                 ${isAdmin ? "<th>Acciones</th>" : ""}
             </tr>
         </thead>
@@ -45,51 +51,83 @@ async function loadTable() {
 
   try {
     const res = await listResource("ubicaciones");
-    let items = res.data.items || res.data;
+    // Filtro base: no granjas
+    const rawItems = res.data.items || res.data;
+    allItems = rawItems.filter((u) => u.tipo !== "Granja");
 
-    // FILTRO: No mostrar Granjas aquí (tienen su propio módulo)
-    items = items.filter((u) => u.tipo !== "Granja");
+    tbody.innerHTML = "";
+    setupSearchListener("search-ubi", allItems, renderTable, [
+      "nombre",
+      "tipo",
+      "direccion.estado",
+      "direccion.municipio",
+      "direccion.sector",
+    ]);
 
-    if (items.length === 0) {
-      tbody.innerHTML =
-        "<tr><td colspan='4'>No hay ubicaciones registradas</td></tr>";
-      return;
-    }
-
-    tbody.innerHTML = items
-      .map((u) => {
-        const dir = u.direccion || {};
-        const lugar = `${dir.estado || "N/A"} - ${dir.municipio || "N/A"}`;
-
-        const btnDelete = isAdmin
-          ? `<td><button class="del-btn danger" data-id="${u.id}">Eliminar</button></td>`
-          : "";
-
-        return `
-                <tr>
-                    <td><strong>${u.nombre}</strong></td>
-                    <td><span class="badge">${u.tipo}</span></td>
-                    <td>${lugar}</td>
-                    ${btnDelete}
-                </tr>
-            `;
-      })
-      .join("");
-
-    if (isAdmin) {
-      tbody.querySelectorAll(".del-btn").forEach(
-        (b) =>
-          (b.onclick = async (e) => {
-            if (confirm("¿Eliminar ubicación?")) {
-              await deleteResource("ubicaciones", e.target.dataset.id);
-              loadTable();
-            }
-          }),
-      );
-    }
+    renderTable(allItems);
   } catch (e) {
     console.error(e);
     tbody.innerHTML = "<tr><td colspan='4'>Error cargando datos</td></tr>";
+  }
+}
+
+function renderTable(items) {
+  const tbody = document.getElementById("tbl-body");
+
+  if (!tbody) {
+    console.error("No se encontró el elemento tbody con id 'tbl-body'");
+    return;
+  }
+
+  if (items.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" style="text-align:center;">No hay ubicaciones registradas (distintas a Granjas)</td></tr>';
+    return;
+  }
+
+  const html = items
+    .map((u) => {
+      // Safe navigation para dirección
+      const dir =
+        u.direccion ||
+        (u.id_direcciones && typeof u.id_direcciones === "object"
+          ? u.id_direcciones
+          : {});
+      const estado = dir.estado || "N/A";
+      const municipio = dir.municipio || "N/A";
+      const sector = dir.sector || "N/A";
+      // Necesitamos saber si es admin, asumimos acceso a variable global isAdmin definida arriba en el archivo
+      const btnDel =
+        typeof isAdmin !== "undefined" && isAdmin
+          ? `<td><button class="btn-delete danger" data-id="${u.id}">Eliminar</button></td>`
+          : "";
+
+      return `
+                <tr>
+                    <td><strong>${u.nombre}</strong></td>
+                    <td><span class="badge">${u.tipo}</span></td>
+                    <td>${estado}</td>
+                    <td>${municipio}</td>
+                    <td>${sector}</td>
+                    ${btnDel}
+                </tr>
+            `;
+    })
+    .join("");
+
+  tbody.innerHTML = html;
+
+  // Reasignar eventos de eliminación
+  if (typeof isAdmin !== "undefined" && isAdmin) {
+    tbody.querySelectorAll(".btn-delete").forEach(
+      (b) =>
+        (b.onclick = async (e) => {
+          if (confirm("¿Eliminar esta ubicación?")) {
+            await deleteResource("ubicaciones", e.target.dataset.id);
+            loadTable();
+          }
+        }),
+    );
   }
 }
 

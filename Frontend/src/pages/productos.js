@@ -5,7 +5,9 @@ import {
   getUserInfo,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js"; // <---
 
+let allItems = [];
 let isAdmin = false;
 
 export async function init(container) {
@@ -14,62 +16,42 @@ export async function init(container) {
 
   container.innerHTML = `
     <div class="header-section">
-      <h2>Gestión de Productos</h2>
-      <button id="btn-create" class="btn-primary">Nuevo Producto</button>
+      <h2>Productos</h2>
+      ${isAdmin ? '<button id="btn-create" class="btn-primary">Nuevo Producto</button>' : ""}
     </div>
+    ${getSearchInputHTML("search-prod", "Buscar producto...")}
     <div class="table-container">
-      <table id="data-table">
-          <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Código</th>
-                ${isAdmin ? "<th>ID Sist.</th>" : ""}
-                ${isAdmin ? "<th>Acciones</th>" : ""}
-              </tr>
-          </thead>
-          <tbody></tbody>
-      </table>
+       <table id="products-table"><thead><tr><th>Nombre</th><th>Código</th>${isAdmin ? "<th>Acciones</th>" : ""}</tr></thead><tbody></tbody></table>
     </div>
   `;
-
-  document
-    .querySelector("#btn-create")
-    .addEventListener("click", showCreateModal);
-  loadData();
+  if (isAdmin) document.getElementById("btn-create").onclick = showCreateModal;
+  loadTable();
 }
 
-async function loadData() {
-  const tbody = document.querySelector("#data-table tbody");
-  tbody.innerHTML = "<tr><td colspan='4'>Cargando...</td></tr>";
-  try {
-    const res = await listResource("productos");
-    const list = res.data.items || res.data;
-    tbody.innerHTML = "";
+async function loadTable() {
+  const res = await listResource("productos");
+  allItems = res.data.items || res.data;
+  setupSearchListener("search-prod", allItems, renderTable, [
+    "nombre",
+    "codigo",
+  ]);
+  renderTable(allItems);
+}
 
-    list.forEach((item) => {
-      const tr = document.createElement("tr");
-
-      let html = `
-            <td>${item.nombre}</td>
-            <td><strong>${item.codigo}</strong></td>
-      `;
-
-      if (isAdmin) html += `<td><small>${item.id}</small></td>`;
-      if (isAdmin)
-        html += `<td><button class="btn-delete danger" data-id="${item.id}">Eliminar</button></td>`;
-
-      tr.innerHTML = html;
-      tbody.appendChild(tr);
-    });
-
-    if (isAdmin) {
-      tbody.querySelectorAll(".btn-delete").forEach((btn) => {
-        btn.addEventListener("click", (e) => handleDelete(e.target.dataset.id));
-      });
-    }
-  } catch (e) {
-    console.error(e);
-  }
+function renderTable(items) {
+  const tbody = document.querySelector("#products-table tbody");
+  tbody.innerHTML = items
+    .map(
+      (p) => `
+        <tr>
+            <td>${p.nombre}</td>
+            <td>${p.codigo}</td>
+            ${isAdmin ? `<td><button class="del-btn danger" data-id="${p.id}">Eliminar</button></td>` : ""}
+        </tr>
+    `,
+    )
+    .join("");
+  // bind events...
 }
 
 function showCreateModal() {

@@ -7,8 +7,10 @@ import {
   createEmpresaCombined,
 } from "../api.js";
 import { modal } from "../components/Modal.js";
+import { getSearchInputHTML, setupSearchListener } from "../utils.js";
 import { COUNTRY_CODES } from "../utils.js";
 
+let allItems = []; // <--- AGREGAR ESTO AL INICIO
 let currentRole = null;
 
 export async function init(container) {
@@ -21,6 +23,7 @@ export async function init(container) {
       <h2>Choferes</h2>
       <button id="btn-create" class="btn-primary">Nuevo Chofer</button>
     </div>
+    ${getSearchInputHTML("search-chof", "Nombre, Cédula o Empresa")}
     <div class="table-container">
       <table id="data-table">
         <thead>
@@ -42,16 +45,28 @@ export async function init(container) {
 }
 
 async function loadTable() {
+  const res = await listResource("choferes");
+  allItems = res.data.items || res.data;
+
+  setupSearchListener("search-chof", allItems, renderTable, [
+    "persona.nombre",
+    "persona.apellido",
+    "persona.cedula",
+    "empresa.nombre",
+  ]);
+
+  renderTable(allItems);
+}
+
+function renderTable(items) {
   const tbody = document.querySelector("#data-table tbody");
   tbody.innerHTML = '<tr><td colspan="5">Cargando...</td></tr>';
 
   try {
-    const res = await listResource("choferes");
-    const choferes = res.data.items || res.data;
     const isAdmin = currentRole === 1;
 
     tbody.innerHTML = "";
-    choferes.forEach((c) => {
+    items.forEach((c) => {
       const p = c.persona || {};
       const emp = c.empresa || {};
       let phoneStr = "N/A";
