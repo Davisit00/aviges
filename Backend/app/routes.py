@@ -6,6 +6,8 @@ import serial
 import serial.tools.list_ports 
 import datetime 
 import uuid
+from decimal import Decimal
+from sqlalchemy import text
 
 from .models import (
     Usuarios, Roles, EmpresasTransporte, Granjas, Productos, Galpones,
@@ -1119,33 +1121,93 @@ def read_serial():
 @api_bp.route("/tickets_pesaje/registrar_peso", methods=["POST"])
 @jwt_required()
 def registrar_peso_ticket():
-    data = request.get_json(force=True) or {}
-    ticket_id = data.get("id")
-    tipo_peso = data.get("tipo_peso")  
-    peso = data.get("peso")
-
-    if not ticket_id or tipo_peso not in ("bruto", "tara") or peso is None:
-        return jsonify({"error": "Datos requeridos: id, tipo_peso (bruto|tara), peso"}), 400
-
-    ticket = TicketPesaje.query.get(ticket_id)
-    if not ticket:
-        return jsonify({"error": "Ticket no encontrado"}), 404
-
-    if tipo_peso == "bruto":
-        ticket.peso_bruto = peso
-    elif tipo_peso == "tara":
-        ticket.peso_tara = peso
-
-    if ticket.peso_bruto and ticket.peso_tara:
-        ticket.peso_neto = abs(ticket.peso_bruto - ticket.peso_tara)
-        ticket.estado = "Finalizado"
-    else:
-        ticket.estado = "En Proceso"
-
     from . import db
-    db.session.commit()
-    
-    return jsonify(serialize(ticket))
+    from sqlalchemy import text
+    import traceback
+    try:
+        data = request.get_json(force=True) or {}
+        id = data.get("id")
+        peso = data.get("peso")
+        id_usuario = get_jwt_identity()  # ID del usuario que realiza el segundo pesaje
+
+        if not id or peso is None:
+            return jsonify({"error": "Datos requeridos: id, peso"}), 400
+
+        ticket = TicketPesaje.query.filter_by(id=id, is_deleted=False).first()
+        if not ticket:
+            return jsonify({"error": "Ticket no encontrado"}), 404
+
+        # Determinar tipo de peso según el tipo de ticket
+        if ticket.tipo.lower() == "entrada":
+            tipo_peso = "tara"
+        elif ticket.tipo.lower() == "salida":
+            tipo_peso = "bruto"
+        else:
+            return jsonify({"error": "Tipo de ticket desconocido"}), 400
+
+        peso_decimal = Decimal(str(peso))
+
+        # Actualiza el campo correspondiente
+        if tipo_peso == "bruto":
+            db.session.execute(
+                text("UPDATE Ticket_pesaje SET peso_bruto = :peso WHERE id = :id AND is_deleted = 0"),
+                {"peso": peso_decimal, "id": id}
+            )
+        elif tipo_peso == "tara":
+            db.session.execute(
+                text("UPDATE Ticket_pesaje SET peso_tara = :peso WHERE id = :id AND is_deleted = 0"),
+                {"peso": peso_decimal, "id": id}
+            )
+
+        # Consulta los pesos actualizados directamente de la base de datos
+        result = db.session.execute(
+            text("SELECT peso_bruto, peso_tara FROM Ticket_pesaje WHERE id = :id AND is_deleted = 0"),
+            {"id": id}
+        ).fetchone()
+
+        peso_bruto = result.peso_bruto
+        peso_tara = result.peso_tara
+
+        if peso_bruto is not None and peso_tara is not None:
+            if ticket.tipo.lower() in ("entrada", "salida"):
+                peso_neto = abs(peso_bruto - peso_tara)
+            else:
+                peso_neto = None
+            db.session.execute(
+                text("""
+                    UPDATE Ticket_pesaje 
+                    SET peso_neto = :neto,
+                        id_usuarios_segundo_peso = :id_usuario,
+                        fecha_segundo_peso = :fecha
+                    WHERE id = :id AND is_deleted = 0
+                """),
+                {
+                    "neto": peso_neto,
+                    "id_usuario": id_usuario,
+                    "fecha": datetime.datetime.now(),
+                    "id": id
+                }
+            )
+        else:
+            db.session.execute(
+                text("UPDATE Ticket_pesaje SET estado = 'En Proceso' WHERE id = :id AND is_deleted = 0"),
+                {"id": id}
+            )
+
+        if ticket.id_producto != 1:
+            db.session.execute(
+                text("UPDATE Ticket_pesaje SET estado = 'Finalizado' WHERE id = :id AND is_deleted = 0"),
+                {"id": id}
+            )
+
+        db.session.commit()
+        ticket = TicketPesaje.query.filter_by(id=id, is_deleted=False).first()
+        return jsonify(serialize(ticket))
+    except Exception as e:
+        db.session.rollback()
+        print("ERROR EN registrar_peso_ticket:", e)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 @api_bp.route("/tickets_pesaje/<int:ticket_id>/imprimir", methods=["POST"])
 @jwt_required()
@@ -1280,36 +1342,209 @@ def create_ticket_pesaje():
 @jwt_required()
 def registrar_nota_entrega(ticket_id):
     from . import db
+    from sqlalchemy import text
+    from .models import Lotes, Galpones, Granjas, Ubicaciones, Direcciones
+    import datetime
     data = request.get_json(force=True) or {}
-
+    print(f"Registrar nota entrega para ticket {ticket_id} con data: {data}")
     # Validar ticket
     ticket = TicketPesaje.query.get(ticket_id)
     if not ticket:
         return jsonify({"error": "Ticket no encontrado"}), 404
 
-    # Procesar Viajes_tiempos
-    tiempos_data = data.get("tiempos", {})
-    if tiempos_data:
-        tiempos = ViajesTiempos(id_ticket=ticket_id, **tiempos_data)
-        db.session.add(tiempos)
-
-    # Procesar Viajes_conteos
+    # --- DATOS DEL FORMULARIO ---
     conteos_data = data.get("conteos", {})
-    if conteos_data:
-        conteos = ViajesConteos(id_ticket=ticket_id, **conteos_data)
-        db.session.add(conteos)
-
-    # Procesar Viajes_origen
     origen_data = data.get("origen", {})
-    if origen_data:
-        origen = ViajesOrigen(id_ticket=ticket_id, **origen_data)
+    # Tiempos del formulario (solo los de descarga y salida granja)
+    hora_salida_granja = data.get("hora_salida_granja")
+    hora_inicio_descarga = data.get("hora_inicio_descarga")
+    hora_fin_descarga = data.get("hora_fin_descarga")
+
+    # --- CALCULOS DE TIEMPOS ---
+    # Hora llegada romana = fecha_primer_peso
+    hora_llegada_romana = ticket.fecha_primer_peso
+    # Hora salida romana = fecha_segundo_peso
+    hora_salida_romana = ticket.fecha_segundo_peso
+
+    # Convertir strings a datetime si vienen del frontend
+    def parse_dt(val):
+        if isinstance(val, str):
+            try:
+                return datetime.datetime.fromisoformat(val)
+            except Exception:
+                return None
+        return val
+
+    hora_salida_granja = parse_dt(hora_salida_granja)
+    hora_inicio_descarga = parse_dt(hora_inicio_descarga)
+    hora_fin_descarga = parse_dt(hora_fin_descarga)
+
+    # Calcular tiempos en minutos
+    tiempo_transito = None
+    tiempo_espera = None
+    tiempo_operacion = None
+    if hora_salida_granja and hora_llegada_romana:
+        tiempo_transito = int((hora_llegada_romana - hora_salida_granja).total_seconds() // 60)
+    if hora_llegada_romana and hora_inicio_descarga:
+        tiempo_espera = int((hora_inicio_descarga - hora_llegada_romana).total_seconds() // 60)
+    if hora_inicio_descarga and hora_fin_descarga:
+        tiempo_operacion = int((hora_fin_descarga - hora_inicio_descarga).total_seconds() // 60)
+
+    # --- CALCULO DE PESO PROMEDIO JAULAS ---
+    peso_promedio_jaulas = None
+    if ticket.peso_neto and conteos_data.get("numero_de_jaulas"):
+        try:
+            peso_promedio_jaulas = float(ticket.peso_neto) / float(conteos_data["numero_de_jaulas"])
+        except Exception:
+            peso_promedio_jaulas = None
+
+    # --- CALCULO DE ESTADISTICAS ---
+    estadisticas_data = {}
+    aves_recibidas = conteos_data.get("aves_recibidas")
+    aves_faltantes = conteos_data.get("aves_faltantes")
+    aves_aho = conteos_data.get("aves_aho")
+    aves_guia = conteos_data.get("aves_guia")
+
+    porcentaje_aves_faltantes = None
+    porcentaje_aves_ahogadas = None
+    peso_promedio_aves = None
+
+    if aves_recibidas and aves_faltantes is not None and aves_guia:
+        try:
+            porcentaje_aves_faltantes = (float(aves_faltantes) / float(aves_guia)) * 100 if float(aves_guia) > 0 else 0
+        except Exception:
+            porcentaje_aves_faltantes = None
+    if aves_recibidas and aves_aho is not None and aves_guia:
+        try:
+            porcentaje_aves_ahogadas = (float(aves_aho) / float(aves_guia)) * 100 if float(aves_guia) > 0 else 0
+        except Exception:
+            porcentaje_aves_ahogadas = None
+    if aves_recibidas and ticket.peso_neto:
+        try:
+            peso_promedio_aves = float(ticket.peso_neto) / float(aves_recibidas) if float(aves_recibidas) > 0 else 0
+        except Exception:
+            peso_promedio_aves = None
+
+    estadisticas_data = {
+        "porcentaje_aves_faltantes": porcentaje_aves_faltantes,
+        "porcentaje_aves_ahogadas": porcentaje_aves_ahogadas,
+        "peso_promedio_aves": peso_promedio_aves,
+    }
+
+    # --- GUARDAR EN BASE DE DATOS ---
+    # Viajes_tiempos
+    tiempos = ViajesTiempos(
+        id_ticket=ticket_id,
+        hora_salida_granja=hora_salida_granja,
+        hora_llegada_romana=hora_llegada_romana,
+        hora_inicio_descarga=hora_inicio_descarga,
+        hora_fin_descarga=hora_fin_descarga,
+        hora_salida_romana=hora_salida_romana,
+        tiempo_transito=tiempo_transito,
+        tiempo_espera=tiempo_espera,
+        tiempo_operacion=tiempo_operacion,
+    )
+    db.session.add(tiempos)
+
+    # Viajes_conteos
+    conteos = ViajesConteos(
+        id_ticket=ticket_id,
+        aves_guia=conteos_data.get("aves_guia"),
+        aves_recibidas=aves_recibidas,
+        aves_faltantes=aves_faltantes,
+        aves_aho=aves_aho,
+        numero_de_jaulas=conteos_data.get("numero_de_jaulas"),
+        peso_promedio_jaulas=peso_promedio_jaulas,
+        aves_por_jaula=conteos_data.get("aves_por_jaula"),
+    )
+    db.session.add(conteos)
+
+    id_lote = origen_data.get("id_lote")
+    numero_de_orden = origen_data.get("numero_de_orden")
+    lote_data = origen_data.get("lote", {})
+    galpon_data = lote_data.get("galpon", {}) if lote_data else {}
+    granja_data = galpon_data.get("granja", {}) if galpon_data else {}
+    ubicacion_data = granja_data.get("ubicacion", {}) if granja_data else {}
+    direccion_data = ubicacion_data.get("direccion", {}) if ubicacion_data else {}
+
+    # 1. Dirección
+    id_direccion = ubicacion_data.get("id_direcciones")
+    if not id_direccion and direccion_data:
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        id_direccion = direccion.id
+    elif id_direccion:
+        direccion = Direcciones.query.get(id_direccion)
+
+    # 2. Ubicación
+    id_ubicacion = granja_data.get("id_ubicaciones")
+    if not id_ubicacion and ubicacion_data:
+        ubicacion_data["id_direcciones"] = id_direccion
+        ubicacion = Ubicaciones(**ubicacion_data)
+        db.session.add(ubicacion)
+        db.session.flush()
+        id_ubicacion = ubicacion.id
+    elif id_ubicacion:
+        ubicacion = Ubicaciones.query.get(id_ubicacion)
+
+    # 3. Granja
+    id_granja = galpon_data.get("id_granja")
+    if not id_granja and granja_data:
+        granja_data["id_ubicaciones"] = id_ubicacion
+        granja = Granjas(**granja_data)
+        db.session.add(granja)
+        db.session.flush()
+        id_granja = granja.id
+    elif id_granja:
+        granja = Granjas.query.get(id_granja)
+
+    # 4. Galpón
+    id_galpon = lote_data.get("id_galpones")
+    if not id_galpon and galpon_data:
+        galpon_data["id_granja"] = id_granja
+        galpon = Galpones(**galpon_data)
+        db.session.add(galpon)
+        db.session.flush()
+        id_galpon = galpon.id
+    elif id_galpon:
+        galpon = Galpones.query.get(id_galpon)
+
+    # 5. Lote
+    if not id_lote and lote_data:
+        lote_data["id_galpones"] = id_galpon
+        lote = Lotes(**lote_data)
+        db.session.add(lote)
+        db.session.flush()
+        id_lote = lote.id
+    elif id_lote:
+        lote = Lotes.query.get(id_lote)
+
+    # --- FIN CREACIÓN JERÁRQUICA ---
+
+    # Ahora crea ViajesOrigen con el id_lote correcto
+    if id_lote:
+        origen = ViajesOrigen(
+            id_ticket=ticket_id,
+            id_lote=id_lote,
+            numero_de_orden=numero_de_orden,
+        )
         db.session.add(origen)
 
-    # Procesar Estadisticas
-    estadisticas_data = data.get("estadisticas", {})
-    if estadisticas_data:
-        estadisticas = Estadisticas(id_ticket=ticket_id, **estadisticas_data)
-        db.session.add(estadisticas)
+    # Estadisticas
+    estadisticas = Estadisticas(
+        id_ticket=ticket_id,
+        porcentaje_aves_faltantes=estadisticas_data["porcentaje_aves_faltantes"],
+        porcentaje_aves_ahogadas=estadisticas_data["porcentaje_aves_ahogadas"],
+        peso_promedio_aves=estadisticas_data["peso_promedio_aves"],
+    )
+    db.session.add(estadisticas)
+
+    # Cambia el estado del ticket a Finalizado
+    db.session.execute(
+        text("UPDATE Ticket_pesaje SET estado = 'Finalizado' WHERE id = :id"),
+        {"id": ticket_id}
+    )
 
     db.session.commit()
     return jsonify({"status": "ok"})

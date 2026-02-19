@@ -51,7 +51,9 @@ export async function init(container) {
             <th>Placa</th>
             <th>Producto</th>
             <th>Chofer</th>
-            <th>1er Peso</th>
+            <th>Peso bruto</th>
+            <th>Peso tara</th>
+            <th>Peso Neto</th>
             <th>Fecha</th>
             <th>Estado</th>
             <th>Acciones</th>
@@ -102,13 +104,18 @@ async function loadTickets() {
 }
 
 function renderTable(items) {
+  console.log("Renderizando tabla con items:", items);
+  let filteredTickets = items.filter(
+    (t) => (t.estado || "").toLowerCase() === "en proceso",
+  );
+  console.log("Renderizando tabla con tickets:", filteredTickets);
   const tbody = document.getElementById("tickets-tbody");
   if (!tbody) return;
-  if (!items.length) {
+  if (!filteredTickets.length) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">No hay tickets en proceso.</td></tr>`;
     return;
   }
-  tbody.innerHTML = items
+  tbody.innerHTML = filteredTickets
     .map((ticket) => {
       const vehiculo = vehiclesList.find((v) => v.id == ticket.id_vehiculo);
       console.log(
@@ -117,12 +124,6 @@ function renderTable(items) {
         "Vehículo encontrado:",
         vehiculo,
       );
-      const producto = productsList.find((p) => p.id == ticket.id_producto);
-      const chofer = driversList.find((c) => c.id == ticket.id_chofer);
-      const pesoInicial =
-        ticket.peso_bruto > 0
-          ? `Bruto: ${ticket.peso_bruto}`
-          : `Tara: ${ticket.peso_tara}`;
       return `
       <tr>
         <td>${ticket.nro_ticket || ticket.id}</td>
@@ -130,15 +131,28 @@ function renderTable(items) {
         <td>${ticket.asignacion.vehiculo.placa}</td>
         <td>${ticket.producto.nombre}</td>
         <td>${ticket.asignacion.chofer.persona.nombre + " " + ticket.asignacion.chofer.persona.apellido}</td>
-        <td>${pesoInicial}</td>
+        <td>${ticket.peso_bruto || "Sin peso bruto"}</td>
+        <td>${ticket.peso_tara || "Sin peso tara"}</td>
+        <td>${ticket.peso_neto || "Sin peso neto"}</td>
         <td>${new Date(ticket.created_at || ticket.fecha_registro).toLocaleString()}</td>
         <td><span style="background:orange; padding:2px 5px; border-radius:4px;">${ticket.estado}</span></td>
         <td>
-          <button class="btn-primary btn-small" data-id="${ticket.id}" data-action="pesar">Segundo Pesaje</button>
-          <button class="btn-secondary btn-small" data-id="${ticket.id}" data-action="nota">Nota Entrega</button>
+         ${
+           !ticket.peso_neto
+             ? `<button class="btn-primary btn-small" data-id="${ticket.id}" data-action="pesar">Registrar Segundo Peso</button>`
+             : ""
+         }
+        ${
+          ticket.producto.id === 1 &&
+          ticket.tipo === "Entrada" &&
+          (ticket.peso_neto > 0 ||
+            (ticket.peso_bruto > 0 && ticket.peso_tara > 0))
+            ? `<button class="btn-secondary btn-small" data-id="${ticket.id}" data-action="nota">Nota Entrega</button>`
+            : ""
+        }
         </td>
       </tr>
-    `;
+        `;
     })
     .join("");
 
@@ -375,102 +389,112 @@ function showTicketForm(tipo) {
     // --- SUBMIT ---
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
-      let finalUbicID = box.querySelector("#ubic-id").value;
-      let finalDestID = box.querySelector("#dest-id").value;
 
-      // Crear ubicación origen si es modo nuevo
-      if (isNewUbicMode) {
-        const payloadUbic = {
-          nombre: box.querySelector("#new-ubic-nom").value,
-          tipo: box.querySelector("#new-ubic-tipo").value,
-          direccion: {
-            pais: "Venezuela",
-            estado: box.querySelector("#new-ubic-estado").value,
-            municipio: box.querySelector("#new-ubic-municipio").value,
-            sector: box.querySelector("#new-ubic-sector").value,
-            descripcion: box.querySelector("#new-ubic-desc").value,
-          },
-        };
-        const res = await createResource("ubicaciones", payloadUbic);
-        finalUbicID = res.data.id;
-      } else {
-        if (!finalUbicID) {
-          alert("Ubicación de origen inválida");
-          return;
-        }
-      }
+      // --- Origen anidado, solo incluye si hay datos ---
+      const direccion = {};
+      if (box.querySelector("#direccion_id").value)
+        direccion.id = parseInt(box.querySelector("#direccion_id").value, 10);
+      if (box.querySelector("#direccion_pais").value)
+        direccion.pais = box.querySelector("#direccion_pais").value;
+      if (box.querySelector("#direccion_estado").value)
+        direccion.estado = box.querySelector("#direccion_estado").value;
+      if (box.querySelector("#direccion_municipio").value)
+        direccion.municipio = box.querySelector("#direccion_municipio").value;
+      if (box.querySelector("#direccion_sector").value)
+        direccion.sector = box.querySelector("#direccion_sector").value;
+      if (box.querySelector("#direccion_descripcion").value)
+        direccion.descripcion = box.querySelector(
+          "#direccion_descripcion",
+        ).value;
 
-      // Crear ubicación destino si es modo nuevo
-      if (isNewDestMode) {
-        const payloadDest = {
-          nombre: box.querySelector("#new-dest-nom").value,
-          tipo: box.querySelector("#new-dest-tipo").value,
-          direccion: {
-            pais: "Venezuela",
-            estado: box.querySelector("#new-dest-estado").value,
-            municipio: box.querySelector("#new-dest-municipio").value,
-            sector: box.querySelector("#new-dest-sector").value,
-            descripcion: box.querySelector("#new-dest-desc").value,
-          },
-        };
-        const res = await createResource("ubicaciones", payloadDest);
-        finalDestID = res.data.id;
-      } else {
-        if (!finalDestID) {
-          alert("Ubicación de destino inválida");
-          return;
-        }
-      }
+      const ubicacion = {};
+      if (box.querySelector("#ubicacion_id").value)
+        ubicacion.id = parseInt(box.querySelector("#ubicacion_id").value, 10);
+      if (box.querySelector("#ubicacion_nombre").value)
+        ubicacion.nombre = box.querySelector("#ubicacion_nombre").value;
+      if (box.querySelector("#ubicacion_tipo").value)
+        ubicacion.tipo = box.querySelector("#ubicacion_tipo").value;
+      if (Object.keys(direccion).length > 0) ubicacion.direccion = direccion;
 
-      // --- AQUÍ DEBES CREAR EL TICKET ---
-      // Recoge los datos del formulario
-      const vehiculoPlaca = box.querySelector("#vehiculo").value;
-      const choferNombre = box.querySelector("#chofer").value;
-      const productoNombre = box.querySelector("#producto").value;
+      const granja = {};
+      if (box.querySelector("#granja_id").value)
+        granja.id = parseInt(box.querySelector("#granja_id").value, 10);
+      if (box.querySelector("#granja_nombre").value)
+        granja.nombre = box.querySelector("#granja_nombre").value;
+      if (box.querySelector("#granja_id_persona_responsable").value)
+        granja.id_persona_responsable = parseInt(
+          box.querySelector("#granja_id_persona_responsable").value,
+          10,
+        );
+      if (Object.keys(ubicacion).length > 0) granja.ubicacion = ubicacion;
 
-      // Busca los IDs reales
-      const vehiculo = vehiclesList.find((v) => v.placa === vehiculoPlaca);
-      const chofer = driversList.find(
-        (c) =>
-          `${c.persona.nombre} ${c.persona.apellido} - ${c.persona.tipo_cedula}${c.persona.cedula}` ===
-          choferNombre,
-      );
-      const producto = productsList.find((p) =>
-        productoNombre.includes(p.nombre),
-      );
+      const galpon = {};
+      if (box.querySelector("#galpon_id").value)
+        galpon.id = parseInt(box.querySelector("#galpon_id").value, 10);
+      if (box.querySelector("#galpon_nro").value)
+        galpon.nro_galpon = box.querySelector("#galpon_nro").value;
+      if (box.querySelector("#galpon_capacidad").value)
+        galpon.capacidad = parseInt(
+          box.querySelector("#galpon_capacidad").value,
+          10,
+        );
+      if (Object.keys(granja).length > 0) galpon.granja = granja;
 
-      if (!vehiculo || !chofer || !producto) {
-        alert("Debe seleccionar un vehículo, chofer y producto válidos.");
-        return;
-      }
+      const lote = {};
+      if (box.querySelector("#lote_codigo").value)
+        lote.codigo_lote = box.querySelector("#lote_codigo").value;
+      if (box.querySelector("#lote_fecha_alojamiento").value)
+        lote.fecha_alojamiento = box.querySelector(
+          "#lote_fecha_alojamiento",
+        ).value;
+      if (box.querySelector("#lote_cantidad_aves").value)
+        lote.cantidad_aves = parseInt(
+          box.querySelector("#lote_cantidad_aves").value,
+          10,
+        );
+      if (box.querySelector("#id_lote").value)
+        lote.id = parseInt(box.querySelector("#id_lote").value, 10);
+      if (Object.keys(galpon).length > 0) lote.galpon = galpon;
 
-      // --- SOLO ENVÍA EL PRIMER PESO ---
-      let ticketPayload = {
-        id_vehiculo: vehiculo.id,
-        id_chofer: chofer.id,
-        id_producto: producto.id,
-        id_origen: Number(finalUbicID),
-        id_destino: Number(finalDestID),
-        tipo: tipo,
-        estado: "En proceso",
-        id_usuarios_primer_peso: currentUser.id,
-        fecha_primer_peso: new Date().toISOString(),
+      const origen = {};
+      if (box.querySelector("#id_lote").value)
+        origen.id_lote = parseInt(box.querySelector("#id_lote").value, 10);
+      if (box.querySelector("#numero_de_orden").value)
+        origen.numero_de_orden = box.querySelector("#numero_de_orden").value;
+      if (Object.keys(lote).length > 0) origen.lote = lote;
+
+      const data = {
+        conteos: {
+          aves_guia: parseInt(box.querySelector("#aves_guia").value, 10),
+          aves_recibidas: parseInt(
+            box.querySelector("#aves_recibidas").value,
+            10,
+          ),
+          aves_faltantes: parseInt(
+            box.querySelector("#aves_faltantes").value,
+            10,
+          ),
+          aves_aho: parseInt(box.querySelector("#aves_aho").value, 10),
+          numero_de_jaulas: parseInt(
+            box.querySelector("#numero_de_jaulas").value,
+            10,
+          ),
+          aves_por_jaula: parseInt(
+            box.querySelector("#aves_por_jaula").value,
+            10,
+          ),
+        },
+        hora_salida_granja: box.querySelector("#hora_salida_granja").value,
+        hora_inicio_descarga: box.querySelector("#hora_inicio_descarga").value,
+        hora_fin_descarga: box.querySelector("#hora_fin_descarga").value,
+        origen: Object.keys(origen).length > 0 ? origen : undefined,
       };
 
-      if (tipo === "Entrada") {
-        ticketPayload.peso_bruto = parseFloat(inpBruto.value) || 0;
-        ticketPayload.peso_tara = null;
-      } else {
-        ticketPayload.peso_bruto = null;
-        ticketPayload.peso_tara = parseFloat(inpTara.value) || 0;
-      }
-
       try {
-        await createResource("tickets_pesaje", ticketPayload);
+        await saveNotaEntrega(ticketId, data);
         modal.hide();
-        await loadTickets();
       } catch (err) {
-        alert("Error creando ticket: " + (err?.error || err?.message || err));
+        alert("Error guardando nota de entrega");
       }
     };
   });
@@ -481,32 +505,44 @@ function showSecondWeighModal(ticket) {
   modal.show(
     `Registrar Segundo Peso (${tipoPeso === "bruto" ? "Bruto" : "Tara"})`,
     `
-      <form id="form-peso">
-        <div class="form-group">
-          <label>Peso (${tipoPeso === "bruto" ? "Bruto (Full)" : "Tara (Vacío)"})</label>
-          <input type="number" id="peso-input" required style="width:100%;">
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn-primary">Guardar Peso</button>
-          <button type="button" class="btn-secondary" id="btn-cancel">Cancelar</button>
-        </div>
-      </form>
+      <div class="form-group" style="text-align:center;">
+        <button type="button" id="btn-get-peso" class="btn-primary" style="font-size:1.2em; padding:15px 30px;">
+          Leer Báscula
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btn-cancel">Cancelar</button>
+      </div>
     `,
     (box) => {
-      box.querySelector("#btn-cancel").onclick = () => modal.hide();
-      box.querySelector("form").onsubmit = async (e) => {
-        e.preventDefault();
-        const peso = parseFloat(box.querySelector("#peso-input").value);
-        if (!peso) return alert("Ingrese un peso válido");
-        await registerWeigh({
-          id_ticket: ticket.id,
-          tipo: tipoPeso,
-          peso,
-        });
-        modal.hide();
-        await printTicket(ticket.id);
-        await loadTickets();
+      const btnGetPeso = box.querySelector("#btn-get-peso");
+      btnGetPeso.onclick = async () => {
+        btnGetPeso.disabled = true;
+        btnGetPeso.textContent = "Leyendo...";
+        try {
+          const res = await getWeighFromTruckScale();
+          const peso = parseFloat(res.data.data);
+          if (!peso) {
+            alert("No se obtuvo un peso válido de la báscula.");
+            btnGetPeso.disabled = false;
+            btnGetPeso.textContent = "Leer Báscula";
+            return;
+          }
+          console.log("Peso obtenido de báscula:", ticket.id, peso);
+          await registerWeigh({
+            id: ticket.id,
+            peso,
+          });
+          modal.hide();
+          await printTicket(ticket.id);
+          await loadTickets();
+        } catch (err) {
+          alert("Error leyendo báscula o registrando peso.");
+          btnGetPeso.disabled = false;
+          btnGetPeso.textContent = "Leer Báscula";
+        }
       };
+      box.querySelector("#btn-cancel").onclick = () => modal.hide();
     },
   );
 }
@@ -516,13 +552,87 @@ function showNotaEntregaModal(ticketId) {
     "Registrar Nota de Entrega",
     `
       <form id="form-nota">
-        <div class="form-group">
-          <label>Origen</label>
-          <input type="text" id="origen" required>
-        </div>
-        <div class="form-group">
-          <label>Destino</label>
-          <input type="text" id="destino" required>
+        <div style="max-height: 600px; overflow-y: auto; padding-right:5px;">
+          <h4 style="margin-bottom:10px;">Datos de Origen</h4>
+          <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div>
+              <label>ID Lote (opcional)</label>
+              <input type="number" id="id_lote">
+            </div>
+            <div>
+              <label>Número de Orden</label>
+              <input type="text" id="numero_de_orden" required>
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:10px; background:#f8f8f8; padding:10px; border-radius:5px;">
+            <h5 style="margin-bottom:5px;">Datos de Lote (si no hay ID)</h5>
+            <input type="text" id="lote_codigo" placeholder="Código Lote">
+            <input type="date" id="lote_fecha_alojamiento" placeholder="Fecha Alojamiento">
+            <input type="number" id="lote_cantidad_aves" placeholder="Cantidad Aves">
+            <h5 style="margin:10px 0 5px 0;">Galpón</h5>
+            <input type="number" id="galpon_id">
+            <input type="text" id="galpon_nro" placeholder="Nro Galpón">
+            <input type="number" id="galpon_capacidad" placeholder="Capacidad">
+            <h5 style="margin:10px 0 5px 0;">Granja</h5>
+            <input type="number" id="granja_id">
+            <input type="text" id="granja_nombre" placeholder="Nombre Granja">
+            <input type="number" id="granja_id_persona_responsable" placeholder="ID Persona Responsable">
+            <h5 style="margin:10px 0 5px 0;">Ubicación</h5>
+            <input type="number" id="ubicacion_id">
+            <input type="text" id="ubicacion_nombre" placeholder="Nombre Ubicación">
+            <input type="text" id="ubicacion_tipo" placeholder="Tipo Ubicación">
+            <h5 style="margin:10px 0 5px 0;">Dirección</h5>
+            <input type="number" id="direccion_id">
+            <input type="text" id="direccion_pais" placeholder="País">
+            <input type="text" id="direccion_estado" placeholder="Estado">
+            <input type="text" id="direccion_municipio" placeholder="Municipio">
+            <input type="text" id="direccion_sector" placeholder="Sector">
+            <input type="text" id="direccion_descripcion" placeholder="Descripción">
+          </div>
+          <hr>
+          <h4 style="margin-bottom:10px;">Datos de Conteo</h4>
+          <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+            <div>
+              <label>Aves Guía</label>
+              <input type="number" id="aves_guia" required>
+            </div>
+            <div>
+              <label>Aves Recibidas</label>
+              <input type="number" id="aves_recibidas" required>
+            </div>
+            <div>
+              <label>Aves Faltantes</label>
+              <input type="number" id="aves_faltantes" required>
+            </div>
+            <div>
+              <label>Aves Ahogadas</label>
+              <input type="number" id="aves_aho" required>
+            </div>
+            <div>
+              <label>Número de Jaulas</label>
+              <input type="number" id="numero_de_jaulas" required>
+            </div>
+            <div>
+              <label>Aves por Jaula</label>
+              <input type="number" id="aves_por_jaula" required>
+            </div>
+          </div>
+          <hr>
+          <h4 style="margin-bottom:10px;">Tiempos</h4>
+          <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div>
+              <label>Hora Salida Granja</label>
+              <input type="datetime-local" id="hora_salida_granja" required>
+            </div>
+            <div>
+              <label>Hora Inicio Descarga</label>
+              <input type="datetime-local" id="hora_inicio_descarga" required>
+            </div>
+            <div>
+              <label>Hora Fin Descarga</label>
+              <input type="datetime-local" id="hora_fin_descarga" required>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="submit" class="btn-primary">Guardar Nota</button>
@@ -531,199 +641,117 @@ function showNotaEntregaModal(ticketId) {
       </form>
     `,
     (box) => {
-      // --- FUNCIONES DE AYUDA ---
-
-      const origenSelect = box.querySelector("#origen-select");
-      const origenNuevoSection = box.querySelector("#origen-nuevo-section");
-      const btnCancelNuevoOrigen = box.querySelector(
-        "#btn-cancel-nuevo-origen",
-      );
-      const btnSaveNuevoOrigen = box.querySelector("#btn-save-nuevo-origen");
-
-      origenSelect.onchange = () => {
-        if (origenSelect.value === "__nuevo__") {
-          origenNuevoSection.style.display = "block";
-        } else {
-          origenNuevoSection.style.display = "none";
-        }
-      };
-
-      btnCancelNuevoOrigen.onclick = () => {
-        origenNuevoSection.style.display = "none";
-        origenSelect.value = "";
-      };
-
-      btnSaveNuevoOrigen.onclick = async () => {
-        const nombre = box.querySelector("#origen-nombre").value.trim();
-        const tipo = box.querySelector("#origen-tipo").value.trim();
-        const estado = box.querySelector("#origen-estado").value.trim();
-        const municipio = box.querySelector("#origen-municipio").value.trim();
-        const sector = box.querySelector("#origen-sector").value.trim();
-        if (!nombre || !tipo || !estado || !municipio) {
-          alert("Complete todos los campos de ubicación");
-          return;
-        }
-        const res = await createResource("ubicaciones", {
-          nombre,
-          tipo,
-          direccion: {
-            pais: "Venezuela",
-            estado,
-            municipio,
-            sector,
-            descripcion: nombre,
-          },
-        });
-        await loadLists(); // Recarga ubicacionesList
-        origenSelect.innerHTML =
-          `<option value="">Seleccione...</option>` +
-          ubicacionesList
-            .map(
-              (u) => `<option value="${u.id}">${u.nombre} (${u.tipo})</option>`,
-            )
-            .join("") +
-          `<option value="__nuevo__">Registrar nueva ubicación</option>`;
-        origenSelect.value = res.data.id;
-        origenNuevoSection.style.display = "none";
-      };
-
-      // --- DESTINO: Búsqueda y registro nuevo similar a empresas en choferes.js ---
-      const destinoNombre = box.querySelector("#destino-nombre");
-      const destinoTipo = box.querySelector("#destino-tipo");
-      const destinoEstado = box.querySelector("#destino-estado");
-      const destinoMunicipio = box.querySelector("#destino-municipio");
-      const destinoSector = box.querySelector("#destino-sector");
-
-      // Insertar barra de búsqueda y botón para registrar nuevo destino
-      const destinoGroup = destinoNombre.closest(".form-group");
-      destinoGroup.innerHTML = `
-        <label>Destino</label>
-        <div id="destino-search-section">
-          ${getSearchInputHTML("destino-search", "Buscar ubicación destino...")}
-          <select id="destino-select" required style="width:100%;margin-top:5px;">
-            <option value="">Seleccione...</option>
-            ${ubicacionesList.map((u) => `<option value="${u.id}">${u.nombre} (${u.tipo})</option>`).join("")}
-          </select>
-          <div style="margin-top:5px; text-align:right;">
-            <span id="btn-toggle-nuevo-destino" style="color:#003B73; cursor:pointer; text-decoration:underline; font-size:0.9em;">
-              Registrar nueva ubicación
-            </span>
-          </div>
-        </div>
-        <div id="destino-nuevo-section" style="display:none; background:#f0f8ff; padding:10px; border-radius:5px; margin-top:5px;">
-          <span id="btn-cancel-nuevo-destino" style="float:right; cursor:pointer; font-weight:bold;">&times;</span>
-          <input type="text" id="nuevo-destino-nombre" placeholder="Nombre ubicación" style="width:100%; margin-bottom:5px;">
-          <select id="nuevo-destino-tipo" style="width:100%; margin-bottom:5px;">
-            <option value="">Seleccione...</option>
-            ${ubicacionesList.map((u) => `<option value="${u.id}">${u.nombre} (${u.tipo})</option>`).join("")}
-          </select>
-          <input type="text" id="nuevo-destino-estado" placeholder="Estado" style="width:100%; margin-bottom:5px;">
-          <input type="text" id="nuevo-destino-municipio" placeholder="Municipio" style="width:100%; margin-bottom:5px;">
-          <input type="text" id="nuevo-destino-sector" placeholder="Sector / Detalle" style="width:100%; margin-bottom:5px;">
-          <button type="button" id="btn-save-nuevo-destino" class="btn-primary btn-small">Guardar ubicación</button>
-        </div>
-      `;
-
-      // Referencias destino
-      const destinoSelect = box.querySelector("#destino-select");
-      const destinoNuevoSection = box.querySelector("#destino-nuevo-section");
-      const btnToggleNuevoDestino = box.querySelector(
-        "#btn-toggle-nuevo-destino",
-      );
-      const btnCancelNuevoDestino = box.querySelector(
-        "#btn-cancel-nuevo-destino",
-      );
-      const btnSaveNuevoDestino = box.querySelector("#btn-save-nuevo-destino");
-
-      // Búsqueda destino
-      setupSearchListener(
-        "destino-search",
-        ubicacionesList,
-        (filtered) => {
-          destinoSelect.innerHTML =
-            `<option value="">Seleccione...</option>` +
-            filtered
-              .map(
-                (u) =>
-                  `<option value="${u.id}">${u.nombre} (${u.tipo})</option>`,
-              )
-              .join("");
-        },
-        [
-          "nombre",
-          "tipo",
-          "direccion.estado",
-          "direccion.municipio",
-          "direccion.sector",
-        ],
-      );
-
-      // Mostrar formulario nuevo destino
-      btnToggleNuevoDestino.onclick = () => {
-        destinoNuevoSection.style.display = "block";
-        box.querySelector("#destino-search-section").style.display = "none";
-      };
-
-      // Cancelar nuevo destino
-      btnCancelNuevoDestino.onclick = () => {
-        destinoNuevoSection.style.display = "none";
-        box.querySelector("#destino-search-section").style.display = "block";
-        destinoSelect.value = "";
-      };
-
-      // Guardar nueva ubicación destino
-      btnSaveNuevoDestino.onclick = async () => {
-        const nombre = box.querySelector("#nuevo-destino-nombre").value.trim();
-        const tipo = box.querySelector("#nuevo-destino-tipo").value.trim();
-        const estado = box.querySelector("#nuevo-destino-estado").value.trim();
-        const municipio = box
-          .querySelector("#nuevo-destino-municipio")
-          .value.trim();
-        const sector = box.querySelector("#nuevo-destino-sector").value.trim();
-        if (!nombre || !tipo || !estado || !municipio) {
-          alert("Complete todos los campos de ubicación");
-          return;
-        }
-        const res = await createResource("ubicaciones", {
-          nombre,
-          tipo,
-          direccion: {
-            pais: "Venezuela",
-            estado,
-            municipio,
-            sector,
-            descripcion: nombre,
-          },
-        });
-        await loadLists();
-        destinoSelect.innerHTML =
-          `<option value="">Seleccione...</option>` +
-          ubicacionesList
-            .map(
-              (u) => `<option value="${u.id}">${u.nombre} (${u.tipo})</option>`,
-            )
-            .join("") +
-          `<option value="__nuevo__">Registrar nueva ubicación</option>`;
-        destinoSelect.value = res.data.id;
-        destinoNuevoSection.style.display = "none";
-        box.querySelector("#destino-search-section").style.display = "block";
-      };
-
-      // --- ASIGNACIÓN (Vehículo + Chofer) ---
-      // Puedes hacer un bloque similar, con dos selects (vehículo y chofer) y un botón para registrar nueva asignación si lo deseas.
-      // Si quieres que la asignación se cree automáticamente al seleccionar ambos, solo asegúrate de enviar ambos IDs y que el backend la cree si no existe.
-
       box.querySelector("#btn-cancel").onclick = () => modal.hide();
       box.querySelector("form").onsubmit = async (e) => {
         e.preventDefault();
+
+        // --- Origen anidado, solo incluye si hay datos ---
+        const direccion = {};
+        if (box.querySelector("#direccion_id").value)
+          direccion.id = parseInt(box.querySelector("#direccion_id").value, 10);
+        if (box.querySelector("#direccion_pais").value)
+          direccion.pais = box.querySelector("#direccion_pais").value;
+        if (box.querySelector("#direccion_estado").value)
+          direccion.estado = box.querySelector("#direccion_estado").value;
+        if (box.querySelector("#direccion_municipio").value)
+          direccion.municipio = box.querySelector("#direccion_municipio").value;
+        if (box.querySelector("#direccion_sector").value)
+          direccion.sector = box.querySelector("#direccion_sector").value;
+        if (box.querySelector("#direccion_descripcion").value)
+          direccion.descripcion = box.querySelector(
+            "#direccion_descripcion",
+          ).value;
+
+        const ubicacion = {};
+        if (box.querySelector("#ubicacion_id").value)
+          ubicacion.id = parseInt(box.querySelector("#ubicacion_id").value, 10);
+        if (box.querySelector("#ubicacion_nombre").value)
+          ubicacion.nombre = box.querySelector("#ubicacion_nombre").value;
+        if (box.querySelector("#ubicacion_tipo").value)
+          ubicacion.tipo = box.querySelector("#ubicacion_tipo").value;
+        if (Object.keys(direccion).length > 0) ubicacion.direccion = direccion;
+
+        const granja = {};
+        if (box.querySelector("#granja_id").value)
+          granja.id = parseInt(box.querySelector("#granja_id").value, 10);
+        if (box.querySelector("#granja_nombre").value)
+          granja.nombre = box.querySelector("#granja_nombre").value;
+        if (box.querySelector("#granja_id_persona_responsable").value)
+          granja.id_persona_responsable = parseInt(
+            box.querySelector("#granja_id_persona_responsable").value,
+            10,
+          );
+        if (Object.keys(ubicacion).length > 0) granja.ubicacion = ubicacion;
+
+        const galpon = {};
+        if (box.querySelector("#galpon_id").value)
+          galpon.id = parseInt(box.querySelector("#galpon_id").value, 10);
+        if (box.querySelector("#galpon_nro").value)
+          galpon.nro_galpon = box.querySelector("#galpon_nro").value;
+        if (box.querySelector("#galpon_capacidad").value)
+          galpon.capacidad = parseInt(
+            box.querySelector("#galpon_capacidad").value,
+            10,
+          );
+        if (Object.keys(granja).length > 0) galpon.granja = granja;
+
+        const lote = {};
+        if (box.querySelector("#lote_codigo").value)
+          lote.codigo_lote = box.querySelector("#lote_codigo").value;
+        if (box.querySelector("#lote_fecha_alojamiento").value)
+          lote.fecha_alojamiento = box.querySelector(
+            "#lote_fecha_alojamiento",
+          ).value;
+        if (box.querySelector("#lote_cantidad_aves").value)
+          lote.cantidad_aves = parseInt(
+            box.querySelector("#lote_cantidad_aves").value,
+            10,
+          );
+        if (box.querySelector("#id_lote").value)
+          lote.id = parseInt(box.querySelector("#id_lote").value, 10);
+        if (Object.keys(galpon).length > 0) lote.galpon = galpon;
+
+        const origen = {};
+        if (box.querySelector("#id_lote").value)
+          origen.id_lote = parseInt(box.querySelector("#id_lote").value, 10);
+        if (box.querySelector("#numero_de_orden").value)
+          origen.numero_de_orden = box.querySelector("#numero_de_orden").value;
+        if (Object.keys(lote).length > 0) origen.lote = lote;
+
         const data = {
-          origen: {
-            origen: box.querySelector("#origen").value,
-            destino: box.querySelector("#destino").value,
+          conteos: {
+            aves_guia: parseInt(box.querySelector("#aves_guia").value, 10),
+            aves_recibidas: parseInt(
+              box.querySelector("#aves_recibidas").value,
+              10,
+            ),
+            aves_faltantes: parseInt(
+              box.querySelector("#aves_faltantes").value,
+              10,
+            ),
+            aves_aho: parseInt(box.querySelector("#aves_aho").value, 10),
+            numero_de_jaulas: parseInt(
+              box.querySelector("#numero_de_jaulas").value,
+              10,
+            ),
+            aves_por_jaula: parseInt(
+              box.querySelector("#aves_por_jaula").value,
+              10,
+            ),
           },
+          hora_salida_granja: box.querySelector("#hora_salida_granja").value,
+          hora_inicio_descarga: box.querySelector("#hora_inicio_descarga")
+            .value,
+          hora_fin_descarga: box.querySelector("#hora_fin_descarga").value,
+          origen: Object.keys(origen).length > 0 ? origen : undefined,
         };
-        await saveNotaEntrega(ticketId, data);
-        modal.hide();
+
+        try {
+          await saveNotaEntrega(ticketId, data);
+          modal.hide();
+        } catch (err) {
+          alert("Error guardando nota de entrega");
+        }
       };
     },
   );
