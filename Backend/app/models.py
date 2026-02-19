@@ -268,15 +268,11 @@ class TicketPesaje(db.Model):
     id_usuarios_segundo_peso = db.Column(db.Integer, db.ForeignKey("Usuarios.id"))
     id_origen = db.Column(db.Integer, db.ForeignKey("Ubicaciones.id"), nullable=False)
     id_destino = db.Column(db.Integer, db.ForeignKey("Ubicaciones.id"), nullable=False)
-    # Quitamos unique=True de la columna
     nro_ticket = db.Column(db.String(50), nullable=False)
     tipo = db.Column(db.String(255), nullable=False)
-    peso_bruto = db.Column(db.Numeric(10, 2), nullable=False)
+    peso_bruto = db.Column(db.Numeric(10, 2),)
     peso_tara = db.Column(db.Numeric(10, 2))
-    
-    # Columna calculada: peso_bruto - peso_tara
-    peso_neto = db.Column(db.Numeric(10, 2), Computed("peso_bruto - peso_tara"))
-    
+    peso_neto = db.Column(db.Numeric(10, 2))
     estado = db.Column(db.String(255), nullable=False)
     fecha_primer_peso = db.Column(db.DateTime, nullable=False)
     fecha_segundo_peso = db.Column(db.DateTime)
@@ -285,8 +281,8 @@ class TicketPesaje(db.Model):
     __table_args__ = (
         CheckConstraint(f"tipo IN {TIPOS_TICKET}", name='ck_ticket_pesaje_tipo'),
         CheckConstraint(f"estado IN {ESTADOS_TICKET}", name='ck_ticket_pesaje_estado'),
-        # Index único filtrado por is_deleted = 0
         db.Index('idx_ticket_pesaje_nro_ticket_unique_active', 'nro_ticket', unique=True, mssql_where=db.text('is_deleted = 0')),
+        {'implicit_returning': False},  # <-- Aquí va la opción correcta
     )
 
 class ViajesTiempos(db.Model):
@@ -298,14 +294,10 @@ class ViajesTiempos(db.Model):
     hora_inicio_descarga = db.Column(db.DateTime)
     hora_fin_descarga = db.Column(db.DateTime)
     hora_salida_romana = db.Column(db.DateTime)
-    
-    # Calculos de tiempos (DATEDIFF devuelve la diferencia, aquí en minutos)
-    tiempo_transito = db.Column(db.Integer) # Este suele ser complejo de calcular auto sin dos campos claros
+    tiempo_transito = db.Column(db.Integer)
     tiempo_espera = db.Column(db.Integer)
-    
-    # Columna calculada: diferencia en minutos entre inicio y fin descarga
-    tiempo_operacion = db.Column(db.Integer, Computed("DATEDIFF(minute, hora_inicio_descarga, hora_fin_descarga)"))
-    
+    # Solo columna, sin Computed
+    tiempo_operacion = db.Column(db.Integer)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
 
@@ -315,10 +307,8 @@ class ViajesConteos(db.Model):
     id_ticket = db.Column(db.Integer, db.ForeignKey("Ticket_pesaje.id"), nullable=False)
     aves_guia = db.Column(db.Integer, nullable=False)
     aves_recibidas = db.Column(db.Integer)
-    
-    # Columna calculada: aves_guia - aves_recibidas
-    aves_faltantes = db.Column(db.Integer, Computed("aves_guia - aves_recibidas"))
-    
+    # Solo columna, sin Computed
+    aves_faltantes = db.Column(db.Integer)
     aves_aho = db.Column(db.Integer)
     numero_de_jaulas = db.Column(db.Integer, nullable=False)
     peso_promedio_jaulas = db.Column(db.Numeric(10, 2))

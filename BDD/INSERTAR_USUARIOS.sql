@@ -19,8 +19,8 @@ BEGIN TRY
 
     -- 2. Insertar Persona (Requerido por Usuario)
     -- Se usa el ID de la dirección anterior
-    INSERT INTO [Personas] (id_direcciones, nombre, apellido, cedula)
-    VALUES (@IdDireccion, 'Administrador', 'Sistema', 'V-00000001');
+    INSERT INTO [Personas] (id_direcciones, nombre, apellido, tipo_cedula, cedula)
+    VALUES (@IdDireccion, 'Administrador', 'Sistema', 'V', '00000001');
 
     -- Obtener el ID de la persona recién creada
     SET @IdPersona = SCOPE_IDENTITY();

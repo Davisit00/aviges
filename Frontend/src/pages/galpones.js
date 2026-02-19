@@ -220,7 +220,7 @@ function showCreateModal() {
       }
 
       const p = {
-        id_granjas: parseInt(gId), // Corregido key según backend models.py (id_granjas)
+        id_granja: Number(gId), // Corregido key según backend models.py (id_granjas)
         nro_galpon: parseInt(box.querySelector("#fg-nro").value),
         capacidad: parseInt(box.querySelector("#fg-cap").value),
       };

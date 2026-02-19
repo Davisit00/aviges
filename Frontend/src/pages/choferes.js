@@ -222,11 +222,11 @@ async function showForm(id = null, data = null) {
                     </div>
                     <h5  style="margin:10px 0 0 0; color:#003B73;">Dirección</h5>
                     <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:5px; margin-bottom:5px;">
-                        <input type="text" id="new-e-estado" placeholder="Estado" required>
-                        <input type="text" id="new-e-municipio" placeholder="Municipio" required>
-                        <input type="text" id="new-e-sector" placeholder="Sector" required style="width:100%;">
+                        <input type="text" id="new-e-estado" placeholder="Estado">
+                        <input type="text" id="new-e-municipio" placeholder="Municipio">
+                        <input type="text" id="new-e-sector" placeholder="Sector" style="width:100%;">
                     </div>
-                    <input type="text" id="new-e-desc" placeholder="Avenida / Calle / Edificio" required style="width:100%">
+                    <input type="text" id="new-e-desc" placeholder="Avenida / Calle / Edificio" style="width:100%">
                 </div>
                 `
                     : ""

@@ -202,16 +202,39 @@ def expand_resource(data, resource_name, obj):
             prod = Productos.query.get(data["id_producto"])
             data["producto"] = serialize(prod, "productos") if prod else None
             data.pop("id_producto", None)
-        
+
+        # Asignaciones (con chofer y vehiculo)
+        if "id_asignaciones" in data:
+            asignacion = Asignaciones.query.get(data["id_asignaciones"])
+            if asignacion:
+                asignacion_data = serialize(asignacion, "asignaciones")
+                # Expande chofer
+                if asignacion_data.get("id_chofer"):
+                    chofer = Choferes.query.get(asignacion_data["id_chofer"])
+                    if chofer:
+                        chofer_data = serialize(chofer, "choferes")
+                        # Expande persona del chofer
+                        if chofer_data.get("id_personas"):
+                            persona = Personas.query.get(chofer_data["id_personas"])
+                            if persona:
+                                chofer_data["persona"] = serialize(persona, "personas")
+                        asignacion_data["chofer"] = chofer_data
+                # Expande vehiculo
+                if asignacion_data.get("id_vehiculos"):
+                    vehiculo = Vehiculos.query.get(asignacion_data["id_vehiculos"])
+                    if vehiculo:
+                        vehiculo_data = serialize(vehiculo, "vehiculos")
+                        asignacion_data["vehiculo"] = vehiculo_data
+                data["asignacion"] = asignacion_data
+            data.pop("id_asignaciones", None)
+
         # Usuarios (Operadores)
         if "id_usuarios_primer_peso" in data:
             u1 = Usuarios.query.get(data["id_usuarios_primer_peso"])
-            if u1: 
-                # Evitamos expandir todo el usuario recursivamente para tickets (demasiada data innecesaria)
-                # O usamos serialize pero aceptamos el costo. Usaré una versión simplificada.
+            if u1:
                 data["operador_entrada"] = {"id": u1.id, "usuario": u1.usuario}
             data.pop("id_usuarios_primer_peso", None)
-            
+
         if "id_usuarios_segundo_peso" in data and data["id_usuarios_segundo_peso"]:
             u2 = Usuarios.query.get(data["id_usuarios_segundo_peso"])
             if u2:
@@ -223,7 +246,7 @@ def expand_resource(data, resource_name, obj):
             ubi_o = Ubicaciones.query.get(data["id_origen"])
             data["origen"] = serialize(ubi_o, "ubicaciones") if ubi_o else None
             data.pop("id_origen", None)
-        
+
         if "id_destino" in data:
             ubi_d = Ubicaciones.query.get(data["id_destino"])
             data["destino"] = serialize(ubi_d, "ubicaciones") if ubi_d else None
@@ -232,23 +255,19 @@ def expand_resource(data, resource_name, obj):
     return data
 
 def serialize(obj, resource_name=None):
-    if not obj:
-        return None
-    # Base serialization
-    data = {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-    
-    # 1. Limpieza General Primero
-    data = clean_data(data)
-
-    # 2. Si tenemos el nombre del recurso, intentamos expandir
+    data = {}
+    for column in obj.__table__.columns:
+        value = getattr(obj, column.name)
+        # Convierte datetime, date y time a string ISO
+        if isinstance(value, (datetime.datetime, datetime.date)):
+            data[column.name] = value.isoformat()
+        elif isinstance(value, datetime.time):
+            data[column.name] = value.strftime("%H:%M:%S")
+        else:
+            data[column.name] = value
+    # Expande recursos si es necesario
     if resource_name:
-        try:
-            return expand_resource(data, resource_name, obj)
-        except Exception as e:
-            # En producción, logguear esto mejor
-            print(f"Advertencia expandiendo {resource_name} ID {obj.id}: {e}")
-            return data
-            
+        data = expand_resource(data, resource_name, obj)
     return data
 
 # --- HELPER FUNCTIONS ---
@@ -1166,15 +1185,75 @@ def imprimir_ticket(ticket_id):
 @api_bp.route("/tickets_pesaje", methods=["POST"])
 @jwt_required()
 def create_ticket_pesaje():
-    from .models import TicketPesaje
+    from .models import TicketPesaje, Asignaciones, Ubicaciones
     from . import db
     import uuid
+    import datetime
 
     data = request.get_json(force=True) or {}
 
     data.pop("nro_ticket", None)
     data.pop("peso_neto", None)
 
+    # --- Asignación ---
+    id_asignaciones = data.get("id_asignaciones")
+    id_vehiculo = data.pop("id_vehiculo", None)
+    id_chofer = data.pop("id_chofer", None)
+    if not id_asignaciones and id_vehiculo and id_chofer:
+        # Buscar asignación activa
+        asignacion = Asignaciones.query.filter_by(
+            id_vehiculos=id_vehiculo,
+            id_chofer=id_chofer,
+            is_deleted=False
+        ).first()
+        if not asignacion:
+            now = datetime.datetime.now()
+            asignacion = Asignaciones(
+                id_vehiculos=id_vehiculo,
+                id_chofer=id_chofer,
+                fecha=now.date(),
+                hora=now.time()
+            )
+            db.session.add(asignacion)
+            db.session.flush()
+        data["id_asignaciones"] = asignacion.id
+
+    # --- Ubicación Origen ---
+    id_origen = data.get("id_origen")
+    origen_data = data.pop("origen_data", None)
+    if not id_origen and origen_data:
+        # origen_data debe ser un dict con al menos nombre y tipo
+        direccion_data = origen_data.pop("direccion", {})
+        from .models import Direcciones
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        origen = Ubicaciones(
+            id_direcciones=direccion.id,
+            **origen_data
+        )
+        db.session.add(origen)
+        db.session.flush()
+        data["id_origen"] = origen.id
+
+    # --- Ubicación Destino ---
+    id_destino = data.get("id_destino")
+    destino_data = data.pop("destino_data", None)
+    if not id_destino and destino_data:
+        direccion_data = destino_data.pop("direccion", {})
+        from .models import Direcciones
+        direccion = Direcciones(**direccion_data)
+        db.session.add(direccion)
+        db.session.flush()
+        destino = Ubicaciones(
+            id_direcciones=direccion.id,
+            **destino_data
+        )
+        db.session.add(destino)
+        db.session.flush()
+        data["id_destino"] = destino.id
+
+    print("Received data for new ticket:", data)
     ok, err = validate_payload(TicketPesaje, data, partial=False)
     if not ok:
         return jsonify({"error": err}), 400
@@ -1182,11 +1261,19 @@ def create_ticket_pesaje():
     temp_code = f"PEND-{uuid.uuid4().hex[:8]}"
     ticket = TicketPesaje(nro_ticket=temp_code, **data)
     db.session.add(ticket)
+    db.session.flush()  # Asigna el id sin cerrar la transacción
+
+    ticket_id = ticket.id
+
+    db.session.commit()  # Guarda el registro con el nro_ticket temporal
+
+    # Ahora actualiza el nro_ticket real usando una consulta directa
+    real_code = f"TKT-{ticket_id:06d}"
+    db.session.query(TicketPesaje).filter_by(id=ticket_id).update({"nro_ticket": real_code})
     db.session.commit()
 
-    ticket.nro_ticket = f"TKT-{ticket.id:06d}"
-    db.session.commit()
-
+    # Recupera el ticket actualizado para serializarlo
+    ticket = TicketPesaje.query.get(ticket_id)
     return jsonify(serialize(ticket)), 201
 
 @api_bp.route("/tickets_pesaje/<int:ticket_id>/nota_entrega", methods=["POST"])
