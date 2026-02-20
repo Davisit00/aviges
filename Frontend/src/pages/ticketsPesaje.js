@@ -2,7 +2,7 @@ import {
   listResource,
   createResource,
   registerWeigh,
-  printTicket,
+  getPrintTicketData,
   saveNotaEntrega,
   getNotaEntrega,
   getUserInfo,
@@ -103,6 +103,77 @@ async function loadTickets() {
   renderTable(allTickets);
 }
 
+async function printTicket(ticketId) {
+  // Busca el ticket en la lista
+  const ticket = allTickets.find((t) => t.id === ticketId);
+  if (!ticket) {
+    alert("No se encontró el ticket para imprimir.");
+    return;
+  }
+  let response;
+  try {
+    response = await getPrintTicketData(ticket.id);
+  } catch (err) {
+    alert("Error obteniendo los datos del ticket para imprimir.");
+    return;
+  }
+  const data = response.data;
+  if (!data) {
+    alert("No se pudieron obtener los datos del ticket para imprimir.");
+    return;
+  }
+  console.log("Datos para impresión:", data);
+  // Formato simple para impresión
+  const ticketHTML = `
+  <div style="font-family:sans-serif; width:76mm; max-width:76mm; font-size:18px; background:#fff; color:#111; margin:0 auto;">
+    <h2 style="text-align:center; font-size:24px; margin-bottom:6px;">${data.empresa || ""}</h2>
+    <h3 style="text-align:center; font-size:18px; margin-bottom:10px;">Sucursal: ${data.sucursal || ""}</h3>
+    <hr style="height:2px; background:#111;">
+    <div style="margin-bottom:8px;">
+      <b>Ticket #:</b> <span style="font-size:20px;">${data.nro_ticket || ""}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Tipo:</b> <span style="font-size:20px;">${data.tipo_proceso || ""}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Fecha:</b> <span style="font-size:20px;">${data.fecha || ""} ${data.hora || ""}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Chofer:</b> <span style="font-size:20px;">${data.chofer || ""}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Placa:</b> <span style="font-size:20px;">${data.placa || ""}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Producto:</b> <span style="font-size:20px;">${data.producto || ""}</span>
+    </div>
+    <hr style="height:2px; background:#111;">
+    <div style="margin-bottom:8px;">
+      <b>Peso Bruto:</b> <span style="font-size:20px;">${data.peso_bruto + "Kgs" || "N/A"}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Peso Tara:</b> <span style="font-size:20px;">${data.peso_tara + "Kgs" || "N/A"}</span>
+    </div>
+    <div style="margin-bottom:8px;">
+      <b>Peso Neto:</b> <span style="font-size:20px;">${data.peso_neto + "Kgs" || "N/A"}</span>
+    </div>
+    <hr style="height:2px; background:#111;">
+    <div style="text-align:center; font-size:22px; margin-top:12px;">
+      <b>¡Gracias por su visita!</b>
+    </div>
+  </div>
+`;
+
+  const win = window.open("", "Ticket", "width=400,height=600");
+  win.document.write(ticketHTML);
+  win.document.close();
+
+  win.onload = function () {
+    win.print();
+    // win.close();
+  };
+}
+
 function renderTable(items) {
   console.log("Renderizando tabla con items:", items);
   let filteredTickets = items.filter(
@@ -184,21 +255,21 @@ function showTicketForm(tipo) {
         <label>Vehículo (Placa)</label>
         <input list="list-vehiculos" id="vehiculo" required>
         <datalist id="list-vehiculos">
-          ${vehiclesList.map((v) => `<option value="${v.placa}">`).join("")}
+          ${vehiclesList.map((v) => `<option value="${v.placa}"></option>`).join("")}
         </datalist>
       </div>
       <div class="form-group">
         <label>Chofer</label>
         <input list="list-choferes" id="chofer" required>
         <datalist id="list-choferes">
-          ${driversList.map((c) => `<option value="${c.persona.nombre} ${c.persona.apellido} - ${c.persona.tipo_cedula}${c.persona.cedula}">`).join("")}
+          ${driversList.map((c) => `<option value="${c.persona.nombre} ${c.persona.apellido} - ${c.persona.tipo_cedula}${c.persona.cedula}"></option>`).join("")}
         </datalist>
       </div>
       <div class="form-group">
         <label>Producto</label>
         <input list="list-productos" id="producto" required>
         <datalist id="list-productos">
-          ${productsList.map((p) => `<option value=" ${p.codigo} - ${p.nombre}">`).join("")}
+          ${productsList.map((p) => `<option value="${p.codigo} - ${p.nombre}"></option>`).join("")}
         </datalist>
       </div>
       <div class="form-group">
@@ -389,112 +460,104 @@ function showTicketForm(tipo) {
     // --- SUBMIT ---
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
+      let finalUbicID = box.querySelector("#ubic-id").value;
+      let finalDestID = box.querySelector("#dest-id").value;
 
-      // --- Origen anidado, solo incluye si hay datos ---
-      const direccion = {};
-      if (box.querySelector("#direccion_id").value)
-        direccion.id = parseInt(box.querySelector("#direccion_id").value, 10);
-      if (box.querySelector("#direccion_pais").value)
-        direccion.pais = box.querySelector("#direccion_pais").value;
-      if (box.querySelector("#direccion_estado").value)
-        direccion.estado = box.querySelector("#direccion_estado").value;
-      if (box.querySelector("#direccion_municipio").value)
-        direccion.municipio = box.querySelector("#direccion_municipio").value;
-      if (box.querySelector("#direccion_sector").value)
-        direccion.sector = box.querySelector("#direccion_sector").value;
-      if (box.querySelector("#direccion_descripcion").value)
-        direccion.descripcion = box.querySelector(
-          "#direccion_descripcion",
-        ).value;
+      // Crear ubicación origen si es modo nuevo
+      if (isNewUbicMode) {
+        const payloadUbic = {
+          nombre: box.querySelector("#new-ubic-nom").value,
+          tipo: box.querySelector("#new-ubic-tipo").value,
+          direccion: {
+            pais: "Venezuela",
+            estado: box.querySelector("#new-ubic-estado").value,
+            municipio: box.querySelector("#new-ubic-municipio").value,
+            sector: box.querySelector("#new-ubic-sector").value,
+            descripcion: box.querySelector("#new-ubic-desc").value,
+          },
+        };
+        const res = await createResource("ubicaciones", payloadUbic);
+        finalUbicID = res.data.id;
+      } else {
+        if (!finalUbicID) {
+          alert("Ubicación de origen inválida");
+          return;
+        }
+      }
 
-      const ubicacion = {};
-      if (box.querySelector("#ubicacion_id").value)
-        ubicacion.id = parseInt(box.querySelector("#ubicacion_id").value, 10);
-      if (box.querySelector("#ubicacion_nombre").value)
-        ubicacion.nombre = box.querySelector("#ubicacion_nombre").value;
-      if (box.querySelector("#ubicacion_tipo").value)
-        ubicacion.tipo = box.querySelector("#ubicacion_tipo").value;
-      if (Object.keys(direccion).length > 0) ubicacion.direccion = direccion;
+      // Crear ubicación destino si es modo nuevo
+      if (isNewDestMode) {
+        const payloadDest = {
+          nombre: box.querySelector("#new-dest-nom").value,
+          tipo: box.querySelector("#new-dest-tipo").value,
+          direccion: {
+            pais: "Venezuela",
+            estado: box.querySelector("#new-dest-estado").value,
+            municipio: box.querySelector("#new-dest-municipio").value,
+            sector: box.querySelector("#new-dest-sector").value,
+            descripcion: box.querySelector("#new-dest-desc").value,
+          },
+        };
+        const res = await createResource("ubicaciones", payloadDest);
 
-      const granja = {};
-      if (box.querySelector("#granja_id").value)
-        granja.id = parseInt(box.querySelector("#granja_id").value, 10);
-      if (box.querySelector("#granja_nombre").value)
-        granja.nombre = box.querySelector("#granja_nombre").value;
-      if (box.querySelector("#granja_id_persona_responsable").value)
-        granja.id_persona_responsable = parseInt(
-          box.querySelector("#granja_id_persona_responsable").value,
-          10,
-        );
-      if (Object.keys(ubicacion).length > 0) granja.ubicacion = ubicacion;
+        finalDestID = res.data.id;
+      } else {
+        if (!finalDestID) {
+          alert("Ubicación de destino inválida");
+          return;
+        }
+      }
 
-      const galpon = {};
-      if (box.querySelector("#galpon_id").value)
-        galpon.id = parseInt(box.querySelector("#galpon_id").value, 10);
-      if (box.querySelector("#galpon_nro").value)
-        galpon.nro_galpon = box.querySelector("#galpon_nro").value;
-      if (box.querySelector("#galpon_capacidad").value)
-        galpon.capacidad = parseInt(
-          box.querySelector("#galpon_capacidad").value,
-          10,
-        );
-      if (Object.keys(granja).length > 0) galpon.granja = granja;
+      // --- AQUÍ DEBES CREAR EL TICKET ---
+      // Recoge los datos del formulario
+      const vehiculoPlaca = box.querySelector("#vehiculo").value;
+      const choferNombre = box.querySelector("#chofer").value;
+      const productoNombre = box.querySelector("#producto").value;
 
-      const lote = {};
-      if (box.querySelector("#lote_codigo").value)
-        lote.codigo_lote = box.querySelector("#lote_codigo").value;
-      if (box.querySelector("#lote_fecha_alojamiento").value)
-        lote.fecha_alojamiento = box.querySelector(
-          "#lote_fecha_alojamiento",
-        ).value;
-      if (box.querySelector("#lote_cantidad_aves").value)
-        lote.cantidad_aves = parseInt(
-          box.querySelector("#lote_cantidad_aves").value,
-          10,
-        );
-      if (box.querySelector("#id_lote").value)
-        lote.id = parseInt(box.querySelector("#id_lote").value, 10);
-      if (Object.keys(galpon).length > 0) lote.galpon = galpon;
+      // Busca los IDs reales
+      const vehiculo = vehiclesList.find((v) => v.placa === vehiculoPlaca);
+      const chofer = driversList.find(
+        (c) =>
+          `${c.persona.nombre} ${c.persona.apellido} - ${c.persona.tipo_cedula}${c.persona.cedula}` ===
+          choferNombre,
+      );
+      const producto = productsList.find((p) =>
+        productoNombre.includes(p.nombre),
+      );
 
-      const origen = {};
-      if (box.querySelector("#id_lote").value)
-        origen.id_lote = parseInt(box.querySelector("#id_lote").value, 10);
-      if (box.querySelector("#numero_de_orden").value)
-        origen.numero_de_orden = box.querySelector("#numero_de_orden").value;
-      if (Object.keys(lote).length > 0) origen.lote = lote;
+      if (!vehiculo || !chofer || !producto) {
+        alert("Debe seleccionar un vehículo, chofer y producto válidos.");
+        return;
+      }
 
-      const data = {
-        conteos: {
-          aves_guia: parseInt(box.querySelector("#aves_guia").value, 10),
-          aves_recibidas: parseInt(
-            box.querySelector("#aves_recibidas").value,
-            10,
-          ),
-          aves_faltantes: parseInt(
-            box.querySelector("#aves_faltantes").value,
-            10,
-          ),
-          aves_aho: parseInt(box.querySelector("#aves_aho").value, 10),
-          numero_de_jaulas: parseInt(
-            box.querySelector("#numero_de_jaulas").value,
-            10,
-          ),
-          aves_por_jaula: parseInt(
-            box.querySelector("#aves_por_jaula").value,
-            10,
-          ),
-        },
-        hora_salida_granja: box.querySelector("#hora_salida_granja").value,
-        hora_inicio_descarga: box.querySelector("#hora_inicio_descarga").value,
-        hora_fin_descarga: box.querySelector("#hora_fin_descarga").value,
-        origen: Object.keys(origen).length > 0 ? origen : undefined,
+      // --- SOLO ENVÍA EL PRIMER PESO ---
+      let ticketPayload = {
+        id_vehiculo: vehiculo.id,
+        id_chofer: chofer.id,
+        id_producto: producto.id,
+        id_origen: Number(finalUbicID),
+        id_destino: Number(finalDestID),
+        tipo: tipo,
+        estado: "En proceso",
+        id_usuarios_primer_peso: currentUser.id,
+        fecha_primer_peso: new Date().toISOString(),
       };
 
+      if (tipo === "Entrada") {
+        ticketPayload.peso_bruto = parseFloat(inpBruto.value) || 0;
+        ticketPayload.peso_tara = null;
+      } else {
+        ticketPayload.peso_bruto = null;
+        ticketPayload.peso_tara = parseFloat(inpTara.value) || 0;
+      }
+
       try {
-        await saveNotaEntrega(ticketId, data);
+        const res = await createResource("tickets_pesaje", ticketPayload);
         modal.hide();
+        await loadTickets();
+        printTicket(res.data.id);
       } catch (err) {
-        alert("Error guardando nota de entrega");
+        alert("Error creando ticket: " + (err?.error || err?.message || err));
       }
     };
   });
@@ -647,33 +710,36 @@ function showNotaEntregaModal(ticketId) {
 
         // --- Origen anidado, solo incluye si hay datos ---
         const direccion = {};
-        if (box.querySelector("#direccion_id").value)
-          direccion.id = parseInt(box.querySelector("#direccion_id").value, 10);
-        if (box.querySelector("#direccion_pais").value)
+        const direccionIdInput = box.querySelector("#direccion_id");
+        if (direccionIdInput && direccionIdInput.value)
+          direccion.id = parseInt(direccionIdInput.value, 10);
+        if (box.querySelector("#direccion_pais")?.value)
           direccion.pais = box.querySelector("#direccion_pais").value;
-        if (box.querySelector("#direccion_estado").value)
+        if (box.querySelector("#direccion_estado")?.value)
           direccion.estado = box.querySelector("#direccion_estado").value;
-        if (box.querySelector("#direccion_municipio").value)
+        if (box.querySelector("#direccion_municipio")?.value)
           direccion.municipio = box.querySelector("#direccion_municipio").value;
-        if (box.querySelector("#direccion_sector").value)
+        if (box.querySelector("#direccion_sector")?.value)
           direccion.sector = box.querySelector("#direccion_sector").value;
-        if (box.querySelector("#direccion_descripcion").value)
+        if (box.querySelector("#direccion_descripcion")?.value)
           direccion.descripcion = box.querySelector(
             "#direccion_descripcion",
           ).value;
 
         const ubicacion = {};
-        if (box.querySelector("#ubicacion_id").value)
-          ubicacion.id = parseInt(box.querySelector("#ubicacion_id").value, 10);
-        if (box.querySelector("#ubicacion_nombre").value)
+        const ubicacionIdInput = box.querySelector("#ubicacion_id");
+        if (ubicacionIdInput && ubicacionIdInput.value)
+          ubicacion.id = parseInt(ubicacionIdInput.value, 10);
+        if (box.querySelector("#ubicacion_nombre")?.value)
           ubicacion.nombre = box.querySelector("#ubicacion_nombre").value;
-        if (box.querySelector("#ubicacion_tipo").value)
+        if (box.querySelector("#ubicacion_tipo")?.value)
           ubicacion.tipo = box.querySelector("#ubicacion_tipo").value;
         if (Object.keys(direccion).length > 0) ubicacion.direccion = direccion;
 
         const granja = {};
-        if (box.querySelector("#granja_id").value)
-          granja.id = parseInt(box.querySelector("#granja_id").value, 10);
+        const granjaIdInput = box.querySelector("#granja_id");
+        if (granjaIdInput && granjaIdInput.value)
+          granja.id = parseInt(granjaIdInput.value, 10);
         if (box.querySelector("#granja_nombre").value)
           granja.nombre = box.querySelector("#granja_nombre").value;
         if (box.querySelector("#granja_id_persona_responsable").value)

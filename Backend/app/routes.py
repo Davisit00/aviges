@@ -1213,8 +1213,23 @@ def registrar_peso_ticket():
 @jwt_required()
 def imprimir_ticket(ticket_id):
     ticket = TicketPesaje.query.get_or_404(ticket_id)
-    placa = "N/A"  
-    nombre_chofer = "N/A"  
+    asignacion = Asignaciones.query.get(ticket.id_asignaciones) if ticket.id_asignaciones else None
+    placa = "N/A"
+    nombre_chofer = "N/A"
+    if asignacion:
+        # Vehículo
+        vehiculo = Vehiculos.query.get(asignacion.id_vehiculos) if asignacion.id_vehiculos else None
+        if vehiculo:
+            placa = vehiculo.placa
+
+        # Chofer
+        chofer = Choferes.query.get(asignacion.id_chofer) if asignacion.id_chofer else None
+        if chofer:
+            persona = Personas.query.get(chofer.id_personas) if chofer.id_personas else None
+            if persona:
+                nombre_chofer = f"{persona.nombre} {persona.apellido} - {persona.tipo_cedula}{persona.cedula}"
+
+
     producto = Productos.query.get(ticket.id_producto)
     nombre_producto = producto.nombre if producto else "N/A"
     
@@ -1243,6 +1258,11 @@ def imprimir_ticket(ticket_id):
         "peso_bruto": p_bruto,
         "peso_neto": p_neto
     })
+
+@api_bp.route("/tickets_pesaje/<int:id>/reimpresiones")
+def get_reimpresiones(id):
+    ticket = TicketPesaje.query.get_or_404(id)
+    return jsonify({"reimpresiones": ticket.reimpresiones})
 
 @api_bp.route("/tickets_pesaje", methods=["POST"])
 @jwt_required()

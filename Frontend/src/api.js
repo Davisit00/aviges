@@ -91,7 +91,7 @@ export const getSerialList = () => api.get(ENDPOINTS.SERIAL_LIST);
 
 export const getWeighFromTruckScale = () => api.get(ENDPOINTS.SERIAL_READ);
 
-export const printTicket = (id) =>
+export const getPrintTicketData = (id) =>
   api.post(`${ENDPOINTS.TICKETS_PESAJE}/${id}/imprimir`);
 
 export const registerWeigh = (data) =>

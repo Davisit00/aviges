@@ -276,6 +276,7 @@ class TicketPesaje(db.Model):
     estado = db.Column(db.String(255), nullable=False)
     fecha_primer_peso = db.Column(db.DateTime, nullable=False)
     fecha_segundo_peso = db.Column(db.DateTime)
+    reimpresiones = db.Column(db.Integer, default=0)
     is_deleted = db.Column(db.Boolean, default=False, server_default="0", nullable=False)
     created_at = db.Column(db.DateTime, server_default=db.func.getdate(), nullable=False)
     __table_args__ = (
