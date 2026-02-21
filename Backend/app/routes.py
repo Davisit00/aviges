@@ -1259,7 +1259,7 @@ def imprimir_ticket(ticket_id):
         "peso_neto": p_neto
     })
 
-@api_bp.route("/tickets_pesaje/<int:id>/reimpresiones")
+@api_bp.route("/tickets_pesaje/<int:id>/reimpresiones", methods=["GET"])
 def get_reimpresiones(id):
     ticket = TicketPesaje.query.get_or_404(id)
     return jsonify({"reimpresiones": ticket.reimpresiones})
@@ -1587,3 +1587,125 @@ def obtener_nota_entrega(ticket_id):
         "origen": serialize(origen),
         "estadisticas": serialize(estadisticas),
     })
+
+@api_bp.route("/tickets_pesaje/<int:ticket_id>/reimprimir", methods=["POST"])
+@jwt_required()
+def reimprimir_ticket(ticket_id):
+    from . import db
+    from sqlalchemy import text
+    try:
+        ticket = TicketPesaje.query.get_or_404(ticket_id)
+        db.session.execute(
+            text("UPDATE Ticket_pesaje SET reimpresiones = reimpresiones + 1 WHERE id = :id"),
+            {"id": ticket_id}
+        )
+        db.session.commit()
+        ticket.reimpresiones += 1
+        return jsonify({"status": "ok", "reimpresiones": ticket.reimpresiones})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+    
+@api_bp.route("/reporte_transporte_aves_sql", methods=["GET"])
+@jwt_required()
+def reporte_transporte_aves_sql():
+    from . import db  # Asegúrate de que db esté bien inicializado
+    from sqlalchemy import text
+
+    fecha_inicio = request.args.get("fecha_inicio")
+    fecha_fin = request.args.get("fecha_fin")
+    fecha = request.args.get("fecha")
+
+    # 1. Construcción del SQL con alias exactos
+    sql = """
+    SELECT
+        tp.nro_ticket,
+        v.placa,
+        CONCAT(p.nombre, ' ', p.apellido) AS chofer,
+        vt.hora_salida_granja,
+        vt.hora_llegada_romana,
+        vt.tiempo_transito AS tiempo_recorrido,
+        vt.hora_inicio_descarga AS hora_inicio_proceso,
+        vt.tiempo_espera,
+        u.nombre AS granja,
+        vc.aves_recibidas AS aves_contadas,
+        vc.aves_faltantes,
+        e.porcentaje_aves_faltantes,
+        tp.peso_neto AS kilos_netos,
+        e.peso_promedio_aves AS peso_promedio,
+        vc.aves_aho AS aves_ahogadas,
+        e.porcentaje_aves_ahogadas,
+        vc.numero_de_jaulas,
+        vc.aves_por_jaula,
+        g.nro_galpon AS numero_galpon,
+        l.fecha_alojamiento,
+        DATEDIFF(day, l.fecha_alojamiento, vt.hora_salida_granja) AS edad_aves
+    FROM Ticket_pesaje tp
+    LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
+    LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
+    LEFT JOIN Choferes c ON a.id_chofer = c.id
+    LEFT JOIN Personas p ON c.id_personas = p.id
+    LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
+    LEFT JOIN Viajes_conteos vc ON vc.id_ticket = tp.id
+    LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
+    LEFT JOIN Lotes l ON vo.id_lote = l.id
+    LEFT JOIN Galpones g ON l.id_galpones = g.id
+    LEFT JOIN Granjas gr ON g.id_granja = gr.id
+    LEFT JOIN Ubicaciones u ON gr.id_ubicaciones = u.id
+    LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
+    WHERE tp.estado = 'Finalizado'
+    """
+    
+    params = {}
+    # 2. Lógica de filtrado corregida
+# Filtro para una sola fecha (Ignora la hora para encontrar todos los del día)
+    if fecha:
+        sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
+        params["fecha"] = fecha
+        
+    # Filtro para rango (Asegura incluir desde el inicio del primer día hasta el final del último)
+    elif fecha_inicio and fecha_fin:
+        sql += """ 
+            AND vt.hora_salida_granja >= :fecha_inicio 
+            AND vt.hora_salida_granja <= :fecha_fin_full 
+        """
+        params["fecha_inicio"] = f"{fecha_inicio} 00:00:00"
+        params["fecha_fin_full"] = f"{fecha_fin} 23:59:59"
+
+    try:
+        result = db.session.execute(text(sql), params)
+        
+        # 3. Conversión segura a Diccionario
+        data = []
+        for row in result:
+            # Usamos row._mapping para acceder por nombre de forma segura en SQLAlchemy 1.4/2.0
+            r = row._mapping 
+            
+            data.append({
+                "nro_ticket": r["nro_ticket"],
+                "placa": r["placa"],
+                "chofer": r["chofer"],
+                "hora_salida_granja": str(r["hora_salida_granja"]) if r["hora_salida_granja"] else None,
+                "hora_llegada_romana": str(r["hora_llegada_romana"]) if r["hora_llegada_romana"] else None,
+                "tiempo_recorrido": str(r["tiempo_recorrido"]) if r["tiempo_recorrido"] else None,
+                "hora_inicio_proceso": str(r["hora_inicio_proceso"]) if r["hora_inicio_proceso"] else None,
+                "tiempo_espera": str(r["tiempo_espera"]) if r["tiempo_espera"] else None,
+                "granja": r["granja"],
+                "aves_contadas": r["aves_contadas"],
+                "aves_faltantes": r["aves_faltantes"],
+                "porcentaje_aves_faltantes": float(r["porcentaje_aves_faltantes"]) if r["porcentaje_aves_faltantes"] else 0,
+                "kilos_netos": float(r["kilos_netos"]) if r["kilos_netos"] else 0,
+                "peso_promedio": float(r["peso_promedio"]) if r["peso_promedio"] else 0,
+                "aves_ahogadas": r["aves_ahogadas"],
+                "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]) if r["porcentaje_aves_ahogadas"] else 0,
+                "numero_jaulas": r["numero_de_jaulas"], # Corregido nombre según el SQL
+                "aves_por_jaula": r["aves_por_jaula"],
+                "numero_galpon": r["numero_galpon"],
+                "fecha_alojamiento": str(r["fecha_alojamiento"]) if r["fecha_alojamiento"] else None,
+                "edad_aves": r["edad_aves"]
+            })
+            
+        return jsonify(data), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

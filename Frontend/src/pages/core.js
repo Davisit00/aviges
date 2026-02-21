@@ -57,7 +57,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   const btnUsuarios = document.getElementById("users-button");
   const btnLotes = document.getElementById("lot-button");
   const btnUbicaciones = document.getElementById("ubicaciones-button"); // NUEVO BOTON
-  const btnTickets = document.getElementById("tickets-button"); // NUEVO BOTON
+  const btnWeighs = document.getElementById("weigh-button"); // NUEVO BOTON
   const btnLogout = document.getElementById("logout-button");
 
   // Elemento Logo/Título
@@ -122,7 +122,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (btnGalpones) btnGalpones.onclick = () => navigate("galpones");
   if (btnLotes) btnLotes.onclick = () => navigate("lotes");
   if (btnUbicaciones) btnUbicaciones.onclick = () => navigate("ubicaciones"); // CONECTAR
-  if (btnTickets) btnTickets.onclick = () => navigate("tickets"); // CONECTAR
+  if (btnWeighs) btnWeighs.onclick = () => navigate("tickets"); // CONECTAR
 
   // NUEVO: Click en el logo carga 'welcome'
   if (logoContainer) {

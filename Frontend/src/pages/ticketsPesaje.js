@@ -5,6 +5,7 @@ import {
   getPrintTicketData,
   saveNotaEntrega,
   getNotaEntrega,
+  getReimpresiones,
   getUserInfo,
   getWeighFromTruckScale,
 } from "../api.js";
@@ -111,13 +112,18 @@ async function printTicket(ticketId) {
     return;
   }
   let response;
+  let reimpresiones;
   try {
     response = await getPrintTicketData(ticket.id);
+    reimpresiones = await getReimpresiones(ticket.id);
   } catch (err) {
     alert("Error obteniendo los datos del ticket para imprimir.");
     return;
   }
-  const data = response.data;
+  const data = {
+    ...response.data,
+    reimpresiones: reimpresiones.data.reimpresiones,
+  };
   if (!data) {
     alert("No se pudieron obtener los datos del ticket para imprimir.");
     return;
@@ -130,7 +136,7 @@ async function printTicket(ticketId) {
     <h3 style="text-align:center; font-size:18px; margin-bottom:10px;">Sucursal: ${data.sucursal || ""}</h3>
     <hr style="height:2px; background:#111;">
     <div style="margin-bottom:8px;">
-      <b>Ticket #:</b> <span style="font-size:20px;">${data.nro_ticket || ""}</span>
+      <b>Ticket #:</b> <span style="font-size:20px;">${data.nro_ticket + " - " + data.reimpresiones || ""}</span>
     </div>
     <div style="margin-bottom:8px;">
       <b>Tipo:</b> <span style="font-size:20px;">${data.tipo_proceso || ""}</span>
@@ -565,47 +571,77 @@ function showTicketForm(tipo) {
 
 function showSecondWeighModal(ticket) {
   const tipoPeso = ticket.peso_bruto > 0 ? "tara" : "bruto";
-  modal.show(
-    `Registrar Segundo Peso (${tipoPeso === "bruto" ? "Bruto" : "Tara"})`,
-    `
-      <div class="form-group" style="text-align:center;">
-        <button type="button" id="btn-get-peso" class="btn-primary" style="font-size:1.2em; padding:15px 30px;">
-          Leer Báscula
-        </button>
+  const isEntrada = ticket.tipo === "Entrada";
+  const formHTML = `
+    <form id="second-weigh-form">
+      <div class="form-group" style="display:flex; gap:10px; align-items:end;">
+        <div style="flex:1;">
+          <label>Peso Bruto</label>
+          <input type="number" id="peso-bruto" min="0" step="0.01" value="${ticket.peso_bruto || ""}" ${tipoPeso === "bruto" ? "" : "disabled"}>
+          <button type="button" id="btn-get-bruto" class="btn-small" style="margin-top:5px;" ${tipoPeso === "bruto" ? "" : "disabled"}>Leer Báscula</button>
+        </div>
+        <div style="flex:1;">
+          <label>Peso Tara</label>
+          <input type="number" id="peso-tara" min="0" step="0.01" value="${ticket.peso_tara || ""}" ${tipoPeso === "tara" ? "" : "disabled"}>
+          <button type="button" id="btn-get-tara" class="btn-small" style="margin-top:5px;" ${tipoPeso === "tara" ? "" : "disabled"}>Leer Báscula</button>
+        </div>
       </div>
       <div class="modal-footer">
+        <button type="submit" class="btn-primary">Guardar</button>
         <button type="button" class="btn-secondary" id="btn-cancel">Cancelar</button>
       </div>
-    `,
+    </form>
+  `;
+
+  modal.show(
+    `Registrar Segundo Peso (${tipoPeso === "bruto" ? "Bruto" : "Tara"})`,
+    formHTML,
     (box) => {
-      const btnGetPeso = box.querySelector("#btn-get-peso");
-      btnGetPeso.onclick = async () => {
-        btnGetPeso.disabled = true;
-        btnGetPeso.textContent = "Leyendo...";
+      const inpBruto = box.querySelector("#peso-bruto");
+      const inpTara = box.querySelector("#peso-tara");
+      const btnBruto = box.querySelector("#btn-get-bruto");
+      const btnTara = box.querySelector("#btn-get-tara");
+
+      btnBruto.onclick = async () => {
+        btnBruto.disabled = true;
+        const res = await getWeighFromTruckScale();
+        inpBruto.value = res.data.data || "";
+        btnBruto.disabled = false;
+      };
+      btnTara.onclick = async () => {
+        btnTara.disabled = true;
+        const res = await getWeighFromTruckScale();
+        inpTara.value = res.data.data || "";
+        btnTara.disabled = false;
+      };
+
+      box.querySelector("#btn-cancel").onclick = () => modal.hide();
+
+      box.querySelector("form").onsubmit = async (e) => {
+        e.preventDefault();
+        let pesoBruto = parseFloat(inpBruto.value) || 0;
+        let pesoTara = parseFloat(inpTara.value) || 0;
+
+        // Validación: Bruto menor que Tara
+        if (pesoBruto > 0 && pesoTara > 0 && pesoBruto < pesoTara) {
+          const confirmTipo = confirm(
+            "El peso bruto es menor que el peso tara.\n¿Está seguro que escogió correctamente el tipo de proceso (Entrada/Salida)?",
+          );
+          if (!confirmTipo) return;
+        }
+
         try {
-          const res = await getWeighFromTruckScale();
-          const peso = parseFloat(res.data.data);
-          if (!peso) {
-            alert("No se obtuvo un peso válido de la báscula.");
-            btnGetPeso.disabled = false;
-            btnGetPeso.textContent = "Leer Báscula";
-            return;
-          }
-          console.log("Peso obtenido de báscula:", ticket.id, peso);
           await registerWeigh({
             id: ticket.id,
-            peso,
+            peso: tipoPeso === "bruto" ? pesoBruto : pesoTara,
           });
           modal.hide();
           await printTicket(ticket.id);
           await loadTickets();
         } catch (err) {
-          alert("Error leyendo báscula o registrando peso.");
-          btnGetPeso.disabled = false;
-          btnGetPeso.textContent = "Leer Báscula";
+          alert("Error registrando el segundo peso.");
         }
       };
-      box.querySelector("#btn-cancel").onclick = () => modal.hide();
     },
   );
 }

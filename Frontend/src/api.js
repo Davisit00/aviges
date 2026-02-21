@@ -94,6 +94,9 @@ export const getWeighFromTruckScale = () => api.get(ENDPOINTS.SERIAL_READ);
 export const getPrintTicketData = (id) =>
   api.post(`${ENDPOINTS.TICKETS_PESAJE}/${id}/imprimir`);
 
+export const getReimpresiones = (id) =>
+  api.get(`${ENDPOINTS.TICKETS_PESAJE}/${id}/reimpresiones`);
+
 export const registerWeigh = (data) =>
   api.post(`${ENDPOINTS.TICKETS_PESAJE}/registrar_peso`, data);
 
