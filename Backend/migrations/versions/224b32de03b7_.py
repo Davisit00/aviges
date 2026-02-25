@@ -1,8 +1,8 @@
-"""Migracion Inicial Completasad
+"""empty message
 
-Revision ID: 7f66ed27afbc
+Revision ID: 224b32de03b7
 Revises: 
-Create Date: 2026-02-18 10:18:31.916374
+Create Date: 2026-02-24 15:07:41.067930
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '7f66ed27afbc'
+revision = '224b32de03b7'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -269,12 +269,13 @@ def upgrade():
     sa.Column('id_destino', sa.Integer(), nullable=False),
     sa.Column('nro_ticket', sa.String(length=50), nullable=False),
     sa.Column('tipo', sa.String(length=255), nullable=False),
-    sa.Column('peso_bruto', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('peso_bruto', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('peso_tara', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('peso_neto', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('estado', sa.String(length=255), nullable=False),
     sa.Column('fecha_primer_peso', sa.DateTime(), nullable=False),
     sa.Column('fecha_segundo_peso', sa.DateTime(), nullable=True),
+    sa.Column('reimpresiones', sa.Integer(), nullable=True),
     sa.Column('is_deleted', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('getdate()'), nullable=False),
     sa.CheckConstraint("estado IN ('En proceso', 'Finalizado', 'Anulado')", name=op.f('ck_Ticket_pesaje_ck_ticket_pesaje_estado')),

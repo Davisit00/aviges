@@ -1609,17 +1609,17 @@ def reimprimir_ticket(ticket_id):
 @api_bp.route("/reporte_transporte_aves_sql", methods=["GET"])
 @jwt_required()
 def reporte_transporte_aves_sql():
-    from . import db  # Asegúrate de que db esté bien inicializado
+    from . import db
     from sqlalchemy import text
 
     fecha_inicio = request.args.get("fecha_inicio")
     fecha_fin = request.args.get("fecha_fin")
     fecha = request.args.get("fecha")
 
-    # 1. Construcción del SQL con alias exactos
     sql = """
     SELECT
         tp.nro_ticket,
+        tp.estado,
         v.placa,
         CONCAT(p.nombre, ' ', p.apellido) AS chofer,
         vt.hora_salida_granja,
@@ -1639,7 +1639,7 @@ def reporte_transporte_aves_sql():
         vc.aves_por_jaula,
         g.nro_galpon AS numero_galpon,
         l.fecha_alojamiento,
-        DATEDIFF(day, l.fecha_alojamiento, vt.hora_salida_granja) AS edad_aves
+        DATEDIFF(day, l.fecha_alojamiento, vt.hora_llegada_romana) AS edad_aves
     FROM Ticket_pesaje tp
     LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
     LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
@@ -1655,34 +1655,28 @@ def reporte_transporte_aves_sql():
     LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
     WHERE tp.estado = 'Finalizado'
     """
-    
+
     params = {}
-    # 2. Lógica de filtrado corregida
-# Filtro para una sola fecha (Ignora la hora para encontrar todos los del día)
-    if fecha:
+    # Filtrar por fecha y hora
+    if fecha_inicio and fecha_fin:
+        sql += """
+            AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
+            AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
+        """
+        params["fecha_inicio"] = fecha_inicio
+        params["fecha_fin"] = fecha_fin
+    elif fecha:
         sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
         params["fecha"] = fecha
-        
-    # Filtro para rango (Asegura incluir desde el inicio del primer día hasta el final del último)
-    elif fecha_inicio and fecha_fin:
-        sql += """ 
-            AND vt.hora_salida_granja >= :fecha_inicio 
-            AND vt.hora_salida_granja <= :fecha_fin_full 
-        """
-        params["fecha_inicio"] = f"{fecha_inicio} 00:00:00"
-        params["fecha_fin_full"] = f"{fecha_fin} 23:59:59"
 
     try:
         result = db.session.execute(text(sql), params)
-        
-        # 3. Conversión segura a Diccionario
         data = []
         for row in result:
-            # Usamos row._mapping para acceder por nombre de forma segura en SQLAlchemy 1.4/2.0
-            r = row._mapping 
-            
+            r = row._mapping
             data.append({
                 "nro_ticket": r["nro_ticket"],
+                "estado": r["estado"],
                 "placa": r["placa"],
                 "chofer": r["chofer"],
                 "hora_salida_granja": str(r["hora_salida_granja"]) if r["hora_salida_granja"] else None,
@@ -1698,14 +1692,126 @@ def reporte_transporte_aves_sql():
                 "peso_promedio": float(r["peso_promedio"]) if r["peso_promedio"] else 0,
                 "aves_ahogadas": r["aves_ahogadas"],
                 "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]) if r["porcentaje_aves_ahogadas"] else 0,
-                "numero_jaulas": r["numero_de_jaulas"], # Corregido nombre según el SQL
+                "numero_jaulas": r["numero_de_jaulas"],
                 "aves_por_jaula": r["aves_por_jaula"],
                 "numero_galpon": r["numero_galpon"],
                 "fecha_alojamiento": str(r["fecha_alojamiento"]) if r["fecha_alojamiento"] else None,
                 "edad_aves": r["edad_aves"]
             })
-            
         return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@api_bp.route("/reporte_granja_dia", methods=["GET"])
+@jwt_required()
+def reporte_granja_dia():
+    from . import db
+    from sqlalchemy import text
 
+    id_ubicacion_granja = request.args.get("id_granja")  # Este es el id de la ubicación de la granja
+    fecha = request.args.get("fecha")
+    fecha_inicio = request.args.get("fecha_inicio")
+    fecha_fin = request.args.get("fecha_fin")
+
+    if not id_ubicacion_granja or (not fecha and not (fecha_inicio and fecha_fin)):
+        return jsonify({"error": "Debe enviar id_granja (ubicación) y fecha, o fecha_inicio y fecha_fin"}), 400
+
+    sql = """
+    SELECT
+        et.nombre AS empresa_transporte,
+        CONCAT(p.nombre, ' ', p.apellido) AS chofer,
+        v.placa,
+        vo.numero_de_orden,
+        g.nro_galpon,
+        l.codigo_lote AS nro_lote,
+        vc.aves_recibidas AS cantidad_aves,
+        tp.peso_neto,
+        e.peso_promedio_aves
+    FROM Ticket_pesaje tp
+    LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
+    LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
+    LEFT JOIN Empresas_transportes et ON v.id_empresas_transportes = et.id
+    LEFT JOIN Choferes c ON a.id_chofer = c.id
+    LEFT JOIN Personas p ON c.id_personas = p.id
+    LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
+    LEFT JOIN Viajes_conteos vc ON vc.id_ticket = tp.id
+    LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
+    LEFT JOIN Lotes l ON vo.id_lote = l.id
+    LEFT JOIN Galpones g ON l.id_galpones = g.id
+    LEFT JOIN Granjas gr ON g.id_granja = gr.id
+    LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
+    WHERE tp.estado = 'Finalizado'
+      AND tp.id_origen = :id_ubicacion_granja
+    """
+
+    resumen_sql = """
+    SELECT
+        SUM(vc.aves_recibidas) AS total_aves,
+        SUM(tp.peso_neto) AS total_peso_neto,
+        AVG(e.peso_promedio_aves) AS peso_promedio
+    FROM Ticket_pesaje tp
+    LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
+    LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
+    LEFT JOIN Empresas_transportes et ON v.id_empresas_transportes = et.id
+    LEFT JOIN Choferes c ON a.id_chofer = c.id
+    LEFT JOIN Personas p ON c.id_personas = p.id
+    LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
+    LEFT JOIN Viajes_conteos vc ON vc.id_ticket = tp.id
+    LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
+    LEFT JOIN Lotes l ON vo.id_lote = l.id
+    LEFT JOIN Galpones g ON l.id_galpones = g.id
+    LEFT JOIN Granjas gr ON g.id_granja = gr.id
+    LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
+    WHERE tp.estado = 'Finalizado'
+      AND tp.id_origen = :id_ubicacion_granja
+    """
+
+    params = {"id_ubicacion_granja": id_ubicacion_granja}
+
+    # Filtrar por intervalo o por fecha única
+    if fecha_inicio and fecha_fin:
+        sql += """
+            AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
+            AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
+        """
+        resumen_sql += """
+            AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
+            AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
+        """
+        params["fecha_inicio"] = fecha_inicio
+        params["fecha_fin"] = fecha_fin
+    elif fecha:
+        sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
+        resumen_sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
+        params["fecha"] = fecha
+
+    try:
+        result = db.session.execute(text(sql), params)
+        tickets = []
+        for row in result:
+            r = row._mapping
+            tickets.append({
+                "empresa_transporte": r["empresa_transporte"],
+                "chofer": r["chofer"],
+                "placa": r["placa"],
+                "numero_de_orden": r["numero_de_orden"],
+                "nro_galpon": r["nro_galpon"],
+                "nro_lote": r["nro_lote"],
+                "cantidad_aves": r["cantidad_aves"],
+                "peso_neto": float(r["peso_neto"]) if r["peso_neto"] else 0,
+                "peso_promedio": float(r["peso_promedio_aves"]) if r["peso_promedio_aves"] else 0
+            })
+
+        resumen = db.session.execute(text(resumen_sql), params).fetchone()
+        resumen_data = {
+            "total_aves": resumen.total_aves or 0,
+            "total_peso_neto": float(resumen.total_peso_neto) if resumen.total_peso_neto else 0,
+            "peso_promedio": float(resumen.peso_promedio) if resumen.peso_promedio else 0
+        }
+
+        return jsonify({
+            "tickets": tickets,
+            "resumen": resumen_data
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
