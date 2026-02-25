@@ -1378,7 +1378,7 @@ def registrar_nota_entrega(ticket_id):
     # Tiempos del formulario (solo los de descarga y salida granja)
     hora_salida_granja = data.get("hora_salida_granja")
     hora_inicio_descarga = data.get("hora_inicio_descarga")
-    hora_fin_descarga = data.get("hora_fin_descarga")
+    hora_fin_descarga = ticket.fecha_segundo_peso  # Usamos fecha_segundo_peso como hora_fin_descarga para evitar depender del frontend
 
     # --- CALCULOS DE TIEMPOS ---
     # Hora llegada romana = fecha_primer_peso
@@ -1605,19 +1605,21 @@ def reimprimir_ticket(ticket_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
-    
 @api_bp.route("/reporte_transporte_aves_sql", methods=["GET"])
 @jwt_required()
 def reporte_transporte_aves_sql():
     from . import db
     from sqlalchemy import text
+    from flask import request, jsonify
 
     fecha_inicio = request.args.get("fecha_inicio")
     fecha_fin = request.args.get("fecha_fin")
     fecha = request.args.get("fecha")
 
+    # Usamos DISTINCT para evitar filas duplicadas causadas por relaciones uno-a-muchos
+    # COALESCE asegura que si un valor es NULL, devuelva 0 o un string vacío para evitar errores
     sql = """
-    SELECT
+    SELECT DISTINCT
         tp.nro_ticket,
         tp.estado,
         v.placa,
@@ -1630,11 +1632,11 @@ def reporte_transporte_aves_sql():
         u.nombre AS granja,
         vc.aves_recibidas AS aves_contadas,
         vc.aves_faltantes,
-        e.porcentaje_aves_faltantes,
-        tp.peso_neto AS kilos_netos,
-        e.peso_promedio_aves AS peso_promedio,
+        COALESCE(e.porcentaje_aves_faltantes, 0) AS porcentaje_aves_faltantes,
+        COALESCE(tp.peso_neto, 0) AS kilos_netos,
+        COALESCE(e.peso_promedio_aves, 0) AS peso_promedio,
         vc.aves_aho AS aves_ahogadas,
-        e.porcentaje_aves_ahogadas,
+        COALESCE(e.porcentaje_aves_ahogadas, 0) AS porcentaje_aves_ahogadas,
         vc.numero_de_jaulas,
         vc.aves_por_jaula,
         g.nro_galpon AS numero_galpon,
@@ -1657,50 +1659,54 @@ def reporte_transporte_aves_sql():
     """
 
     params = {}
-    # Filtrar por fecha y hora
     if fecha_inicio and fecha_fin:
-        sql += """
-            AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
-            AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
-        """
-        params["fecha_inicio"] = fecha_inicio
-        params["fecha_fin"] = fecha_fin
+        sql += " AND CAST(vt.hora_llegada_romana AS DATE) BETWEEN :f_inicio AND :f_fin"
+        params["f_inicio"] = fecha_inicio
+        params["f_fin"] = fecha_fin
     elif fecha:
         sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
         params["fecha"] = fecha
 
+    # Ordenar por fecha de llegada para mantener consistencia
+    sql += " ORDER BY vt.hora_llegada_romana DESC"
+
     try:
         result = db.session.execute(text(sql), params)
         data = []
-        for row in result:
-            r = row._mapping
+        
+        # .mappings() devuelve cada fila como un diccionario para acceso seguro
+        for r in result.mappings():
             data.append({
                 "nro_ticket": r["nro_ticket"],
                 "estado": r["estado"],
-                "placa": r["placa"],
-                "chofer": r["chofer"],
+                "placa": r["placa"] or "N/A",
+                "chofer": r["chofer"] or "N/A",
                 "hora_salida_granja": str(r["hora_salida_granja"]) if r["hora_salida_granja"] else None,
                 "hora_llegada_romana": str(r["hora_llegada_romana"]) if r["hora_llegada_romana"] else None,
                 "tiempo_recorrido": str(r["tiempo_recorrido"]) if r["tiempo_recorrido"] else None,
                 "hora_inicio_proceso": str(r["hora_inicio_proceso"]) if r["hora_inicio_proceso"] else None,
                 "tiempo_espera": str(r["tiempo_espera"]) if r["tiempo_espera"] else None,
-                "granja": r["granja"],
-                "aves_contadas": r["aves_contadas"],
-                "aves_faltantes": r["aves_faltantes"],
-                "porcentaje_aves_faltantes": float(r["porcentaje_aves_faltantes"]) if r["porcentaje_aves_faltantes"] else 0,
-                "kilos_netos": float(r["kilos_netos"]) if r["kilos_netos"] else 0,
-                "peso_promedio": float(r["peso_promedio"]) if r["peso_promedio"] else 0,
-                "aves_ahogadas": r["aves_ahogadas"],
-                "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]) if r["porcentaje_aves_ahogadas"] else 0,
-                "numero_jaulas": r["numero_de_jaulas"],
-                "aves_por_jaula": r["aves_por_jaula"],
-                "numero_galpon": r["numero_galpon"],
+                "granja": r["granja"] or "N/A",
+                "aves_contadas": r["aves_contadas"] or 0,
+                "aves_faltantes": r["aves_faltantes"] or 0,
+                "porcentaje_aves_faltantes": float(r["porcentaje_aves_faltantes"]),
+                "kilos_netos": float(r["kilos_netos"]),
+                "peso_promedio": float(r["peso_promedio"]),
+                "aves_ahogadas": r["aves_ahogadas"] or 0,
+                "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]),
+                "numero_jaulas": r["numero_de_jaulas"] or 0,
+                "aves_por_jaula": r["aves_por_jaula"] or 0,
+                "numero_galpon": r["numero_galpon"] or "N/A",
                 "fecha_alojamiento": str(r["fecha_alojamiento"]) if r["fecha_alojamiento"] else None,
-                "edad_aves": r["edad_aves"]
+                "edad_aves": r["edad_aves"] if r["edad_aves"] is not None else 0
             })
+            
         return jsonify(data), 200
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Esto te ayudará a ver el error real en los logs de la consola
+        print(f"Error Reporte: {str(e)}")
+        return jsonify({"error": "Error interno al procesar el reporte", "details": str(e)}), 500
     
 @api_bp.route("/reporte_granja_dia", methods=["GET"])
 @jwt_required()
@@ -1716,76 +1722,98 @@ def reporte_granja_dia():
     if not id_ubicacion_granja or (not fecha and not (fecha_inicio and fecha_fin)):
         return jsonify({"error": "Debe enviar id_granja (ubicación) y fecha, o fecha_inicio y fecha_fin"}), 400
 
+    # 1. Consulta de Detalles (Tickets)
     sql = """
-    SELECT
-        et.nombre AS empresa_transporte,
-        CONCAT(p.nombre, ' ', p.apellido) AS chofer,
-        v.placa,
-        vo.numero_de_orden,
-        g.nro_galpon,
-        l.codigo_lote AS nro_lote,
-        vc.aves_recibidas AS cantidad_aves,
-        tp.peso_neto,
-        e.peso_promedio_aves
-    FROM Ticket_pesaje tp
-    LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
-    LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
-    LEFT JOIN Empresas_transportes et ON v.id_empresas_transportes = et.id
-    LEFT JOIN Choferes c ON a.id_chofer = c.id
-    LEFT JOIN Personas p ON c.id_personas = p.id
-    LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
-    LEFT JOIN Viajes_conteos vc ON vc.id_ticket = tp.id
-    LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
-    LEFT JOIN Lotes l ON vo.id_lote = l.id
-    LEFT JOIN Galpones g ON l.id_galpones = g.id
-    LEFT JOIN Granjas gr ON g.id_granja = gr.id
-    LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
-    WHERE tp.estado = 'Finalizado'
-      AND tp.id_origen = :id_ubicacion_granja
+        SELECT 
+    et.nombre AS empresa_transporte,
+    CONCAT(p.nombre, ' ', p.apellido) AS chofer,
+    v.placa,
+    vo.numero_de_orden,
+    g.nro_galpon,
+    l.codigo_lote AS nro_lote,
+    vc.total_aves AS cantidad_aves,
+    tp.peso_neto,
+    e.peso_prom_aves AS peso_promedio_aves
+        FROM Ticket_pesaje tp
+        LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
+        LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
+        LEFT JOIN Empresas_transportes et ON v.id_empresas_transportes = et.id
+        LEFT JOIN Choferes c ON a.id_chofer = c.id
+        LEFT JOIN Personas p ON c.id_personas = p.id
+        LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
+        LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
+        LEFT JOIN Lotes l ON vo.id_lote = l.id
+        LEFT JOIN Galpones g ON l.id_galpones = g.id
+        LEFT JOIN Granjas gr ON g.id_granja = gr.id
+
+        -- 1. Agrupamos conteos para evitar duplicar las filas del ticket
+        LEFT JOIN (
+            SELECT id_ticket, SUM(aves_recibidas) AS total_aves
+            FROM Viajes_conteos
+            GROUP BY id_ticket
+        ) vc ON vc.id_ticket = tp.id
+
+        -- 2. Agrupamos estadísticas para evitar duplicar las filas del ticket
+        LEFT JOIN (
+            SELECT id_ticket, AVG(peso_promedio_aves) AS peso_prom_aves
+            FROM Estadisticas
+            GROUP BY id_ticket
+        ) e ON e.id_ticket = tp.id
+
+        WHERE tp.estado = 'Finalizado'
+        AND tp.id_origen = :id_ubicacion_granja
     """
 
+    # 2. Consulta de Resumen
+    # Se eliminó el ';' al final y se agregó el JOIN a Viajes_tiempos (vt)
     resumen_sql = """
-    SELECT
-        SUM(vc.aves_recibidas) AS total_aves,
-        SUM(tp.peso_neto) AS total_peso_neto,
-        AVG(e.peso_promedio_aves) AS peso_promedio
-    FROM Ticket_pesaje tp
-    LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
-    LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
-    LEFT JOIN Empresas_transportes et ON v.id_empresas_transportes = et.id
-    LEFT JOIN Choferes c ON a.id_chofer = c.id
-    LEFT JOIN Personas p ON c.id_personas = p.id
-    LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
-    LEFT JOIN Viajes_conteos vc ON vc.id_ticket = tp.id
-    LEFT JOIN Viajes_origen vo ON vo.id_ticket = tp.id
-    LEFT JOIN Lotes l ON vo.id_lote = l.id
-    LEFT JOIN Galpones g ON l.id_galpones = g.id
-    LEFT JOIN Granjas gr ON g.id_granja = gr.id
-    LEFT JOIN Estadisticas e ON e.id_ticket = tp.id
-    WHERE tp.estado = 'Finalizado'
-      AND tp.id_origen = :id_ubicacion_granja
+        SELECT
+            COALESCE(SUM(vc.total_aves), 0) AS total_aves,
+            COALESCE(SUM(tp.peso_neto), 0) AS total_peso_neto,
+            COALESCE(AVG(e.peso_prom_aves), 0) AS peso_promedio
+        FROM Ticket_pesaje tp
+
+        -- Agrupamos conteos
+        LEFT JOIN (
+            SELECT id_ticket, SUM(aves_recibidas) AS total_aves
+            FROM Viajes_conteos
+            GROUP BY id_ticket
+        ) vc ON vc.id_ticket = tp.id
+
+        -- Agrupamos estadísticas
+        LEFT JOIN (
+            SELECT id_ticket, AVG(peso_promedio_aves) AS peso_prom_aves
+            FROM Estadisticas
+            GROUP BY id_ticket
+        ) e ON e.id_ticket = tp.id
+        
+        -- Agregamos vt para poder filtrar por fechas
+        LEFT JOIN Viajes_tiempos vt ON vt.id_ticket = tp.id
+
+        WHERE tp.estado = 'Finalizado'
+        AND tp.id_origen = :id_ubicacion_granja
     """
 
     params = {"id_ubicacion_granja": id_ubicacion_granja}
 
-    # Filtrar por intervalo o por fecha única
+    # 3. Filtrar por intervalo o por fecha única
     if fecha_inicio and fecha_fin:
-        sql += """
+        filtro_fechas = """
             AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
             AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
         """
-        resumen_sql += """
-            AND CAST(vt.hora_llegada_romana AS DATE) >= :fecha_inicio
-            AND CAST(vt.hora_llegada_romana AS DATE) <= :fecha_fin
-        """
+        sql += filtro_fechas
+        resumen_sql += filtro_fechas
         params["fecha_inicio"] = fecha_inicio
         params["fecha_fin"] = fecha_fin
     elif fecha:
-        sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
-        resumen_sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
+        filtro_fechas = " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
+        sql += filtro_fechas
+        resumen_sql += filtro_fechas
         params["fecha"] = fecha
-
+    
     try:
+        # Ejecutar consulta de tickets
         result = db.session.execute(text(sql), params)
         tickets = []
         for row in result:
@@ -1798,20 +1826,32 @@ def reporte_granja_dia():
                 "nro_galpon": r["nro_galpon"],
                 "nro_lote": r["nro_lote"],
                 "cantidad_aves": r["cantidad_aves"],
-                "peso_neto": float(r["peso_neto"]) if r["peso_neto"] else 0,
-                "peso_promedio": float(r["peso_promedio_aves"]) if r["peso_promedio_aves"] else 0
+                "peso_neto": float(r["peso_neto"]) if r["peso_neto"] is not None else 0,
+                "peso_promedio": float(r["peso_promedio_aves"]) if r["peso_promedio_aves"] is not None else 0
             })
 
+        # Ejecutar consulta de resumen
         resumen = db.session.execute(text(resumen_sql), params).fetchone()
-        resumen_data = {
-            "total_aves": resumen.total_aves or 0,
-            "total_peso_neto": float(resumen.total_peso_neto) if resumen.total_peso_neto else 0,
-            "peso_promedio": float(resumen.peso_promedio) if resumen.peso_promedio else 0
-        }
+        
+        # Validación extra en caso de que no haya resultados
+        if resumen:
+            r_resumen = resumen._mapping
+            resumen_data = {
+                "total_aves": r_resumen["total_aves"] or 0,
+                "total_peso_neto": float(r_resumen["total_peso_neto"]) if r_resumen["total_peso_neto"] is not None else 0,
+                "peso_promedio": float(r_resumen["peso_promedio"]) if r_resumen["peso_promedio"] is not None else 0
+            }
+        else:
+            resumen_data = {
+                "total_aves": 0,
+                "total_peso_neto": 0,
+                "peso_promedio": 0
+            }
 
         return jsonify({
             "tickets": tickets,
             "resumen": resumen_data
         }), 200
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500

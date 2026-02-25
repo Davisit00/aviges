@@ -3,9 +3,15 @@ import {
   createLoteCombined,
   deleteResource,
   getUserInfo,
+  createResource, // Para crear galpón
+  createGranjaCombined, // Para crear granja
 } from "../api.js";
 import { modal } from "../components/Modal.js";
-import { getSearchInputHTML, setupSearchListener } from "../utils.js";
+import {
+  getSearchInputHTML,
+  setupSearchListener,
+  COUNTRY_CODES,
+} from "../utils.js";
 
 let allItems = []; // <--- CORRECCIÓN 1: Agregar variable global
 let isAdmin = false;
@@ -214,7 +220,7 @@ async function showCreateForm() {
   }
 
   // Formateador
-  const formatGranja = (g) => `${g.ubicacion?.nombre || "Granja " + g.id}`; // Sin ID visible, solo nombre
+  const formatGranja = (g) => `${g.ubicacion?.nombre || "Granja " + g.id}`;
 
   const dlGranjas = granjas
     .map((g) => {
@@ -222,6 +228,78 @@ async function showCreateForm() {
       return `<option value="${nombre}"></option>`;
     })
     .join("");
+
+  // Campos para crear granja
+  const countryOptions = (COUNTRY_CODES || [])
+    .map(
+      (c) =>
+        `<option value="${c.code}" ${c.code === "+58" ? "selected" : ""}>${c.name} (${c.code})</option>`,
+    )
+    .join("");
+
+  const granjaFormHTML = `
+    <div id="section-new-granja" style="display:none; background:#f0f8ff; padding:15px; gap:15px; flex-direction:column; margin-top:5px; border:1px solid #cce5ff; border-radius:5px; position:relative;">
+      <span id="btn-close-new-granja" style="position:absolute; top:5px; right:10px; cursor:pointer; font-weight:bold; color:#666; font-size:1.2em;">&times;</span>
+      <h5 style="margin:0 0 10px 0; color:#003B73;">Nueva Granja</h5>
+      <div class="form-group">
+        <label>Nombre de la Granja</label>
+        <input type="text" id="g-nombre" placeholder="Ej. La Providencia">
+      </div>
+      <div class="form-group">
+        <label>RIF</label>
+        <div style="display:flex; gap:10px;">
+          <select id="g-rif-tipo" style="width:70px"><option value="J">J</option><option value="G">G</option></select>
+          <input type="text" id="g-rif-num" style="flex:1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Teléfono de la Granja</label>
+        <div style="display:flex; gap:5px;">
+          <select id="g-ph-tipo" style="width:90px"><option value="Casa">Casa</option><option value="Trabajo">Trabajo</option></select>
+          <select id="g-ph-pais" style="width:140px">${countryOptions}</select>
+          <input type="text" id="g-ph-area" placeholder="0241" style="width:80px">
+          <input type="text" id="g-ph-num" placeholder="Número" style="flex:1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Dirección</label>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:5px;">
+          <input type="text" id="g-est" placeholder="Estado">
+          <input type="text" id="g-mun" placeholder="Municipio">
+          <input type="text" id="g-sec" placeholder="Sector" style="grid-column: span 2;">
+        </div>
+        <input type="text" id="g-desc" placeholder="Descripción (Ej. Cerca del río...)" style="width:100%; margin-top:10px;">
+      </div>
+      <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ddd;">
+      <h4>Datos del Responsable</h4>
+      <div class="form-group">
+        <div style="display:flex; gap:10px; margin-bottom: 10px;">
+          <select id="resp-tipo-cedula" style="width:70px"><option value="V">V</option><option value="E">E</option></select>
+          <input type="text" id="resp-cedula" placeholder="Cédula" style="flex:1;">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+          <input type="text" id="resp-nombre" placeholder="Nombre">
+          <input type="text" id="resp-apellido" placeholder="Apellido">
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Campos para crear galpón
+  const galponFormHTML = `
+    <div id="section-new-galpon" style="display:none; background:#f9f9f9; padding:15px; gap:15px; flex-direction:column; margin-top:5px; border:1px solid #e0e0e0; border-radius:5px; position:relative;">
+      <span id="btn-close-new-galpon" style="position:absolute; top:5px; right:10px; cursor:pointer; font-weight:bold; color:#666; font-size:1.2em;">&times;</span>
+      <h5 style="margin:0 0 10px 0; color:#003B73;">Nuevo Galpón</h5>
+      <div class="form-group">
+        <label>Número Identificador Galpón</label>
+        <input type="number" id="fg-nro" placeholder="Ej. 1" min="1">
+      </div>
+      <div class="form-group">
+        <label>Capacidad Aves</label>
+        <input type="number" id="fg-cap" placeholder="Ej. 5000" min="1">
+      </div>
+    </div>
+  `;
 
   const html = `
         <form id="f-lote">
@@ -236,18 +314,29 @@ async function showCreateForm() {
                 <input list="dl-l-granjas" id="l-granja-input" placeholder="Escriba nombre de granja..." style="width:100%">
                 <datalist id="dl-l-granjas">${dlGranjas}</datalist>
                 <input type="hidden" id="l-granja-id">
+                <div style="margin-top:5px; text-align:right;">
+                  <span id="btn-toggle-new-granja" style="color:#003B73; cursor:pointer; text-decoration:underline; font-size:0.9em;">
+                    Registrar nueva granja
+                  </span>
+                </div>
             </div>
+            ${granjaFormHTML}
 
-            <div class="form-group">
+            <div class="form-group" style="margin-top:20px;">
                 <label>Galpón de Destino</label>
-                <!-- Este se mantiene como SELECT porque se filtra dinámicamente y suelen ser pocos por granja -->
                 <select id="l-galpon" required disabled style="background-color:#eee">
                     <option value="">Seleccione Granja primero...</option>
                 </select>
+                <div style="margin-top:5px; text-align:right;">
+                  <span id="btn-toggle-new-galpon" style="color:#003B73; cursor:pointer; text-decoration:underline; font-size:0.9em;">
+                    Registrar nuevo galpón
+                  </span>
+                </div>
             </div>
+            ${galponFormHTML}
             
             <!-- Resto de campos fecha y cantidad -->
-            <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="form-group" style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <div><label>Fecha Alojamiento</label><input type="date" id="l-fecha" required></div>
                 <div><label>Cant. Aves</label><input type="number" id="l-cantidad" required></div>
             </div>
@@ -262,20 +351,63 @@ async function showCreateForm() {
   modal.show("Registrar Nuevo Lote", html, (box) => {
     const inputGranja = box.querySelector("#l-granja-input");
     const selectGalpon = box.querySelector("#l-galpon");
+    const inpGranjaId = box.querySelector("#l-granja-id");
+
+    // --- NUEVO: Toggle granja ---
+    const btnShowGranja = box.querySelector("#btn-toggle-new-granja");
+    const btnHideGranja = box.querySelector("#btn-close-new-granja");
+    const secNewGranja = box.querySelector("#section-new-granja");
+    let isNewGranjaMode = false;
+
+    btnShowGranja.onclick = () => {
+      secNewGranja.style.display = "flex";
+      inputGranja.required = false;
+      inputGranja.value = "";
+      inpGranjaId.value = "";
+      isNewGranjaMode = true;
+      // Al abrir nueva granja, deshabilitar galpón y limpiar
+      selectGalpon.innerHTML =
+        '<option value="">Seleccione Granja primero...</option>';
+      selectGalpon.disabled = true;
+      selectGalpon.style.backgroundColor = "#eee";
+    };
+    btnHideGranja.onclick = () => {
+      secNewGranja.style.display = "none";
+      inputGranja.required = true;
+      isNewGranjaMode = false;
+    };
+
+    // --- NUEVO: Toggle galpón ---
+    const btnShowGalpon = box.querySelector("#btn-toggle-new-galpon");
+    const btnHideGalpon = box.querySelector("#btn-close-new-galpon");
+    const secNewGalpon = box.querySelector("#section-new-galpon");
+    let isNewGalponMode = false;
+
+    btnShowGalpon.onclick = () => {
+      secNewGalpon.style.display = "flex";
+      selectGalpon.required = false;
+      selectGalpon.value = "";
+      isNewGalponMode = true;
+    };
+    btnHideGalpon.onclick = () => {
+      secNewGalpon.style.display = "none";
+      selectGalpon.required = true;
+      isNewGalponMode = false;
+    };
 
     // Evento Change del Input Buscador
     inputGranja.onchange = () => {
       const val = inputGranja.value;
-      const match = granjas.find((g) => formatGranja(g) === val); // Match con nombre limpio
+      const match = granjas.find((g) => formatGranja(g) === val);
+      inpGranjaId.value = match ? match.id : "";
       selectGalpon.innerHTML = '<option value="">Seleccione Galpón...</option>';
       selectGalpon.disabled = true;
       selectGalpon.style.backgroundColor = "#eee";
-
       if (match) {
         const granjaId = match.id;
         // Filtrar y activar
         const misGalpones = galpones.filter((g) => {
-          const gId = g.id_granjas || (g.granja ? g.granja.id : null);
+          const gId = g.id_granja || (g.granja ? g.granja.id : null);
           return gId == granjaId;
         });
 
@@ -288,7 +420,6 @@ async function showCreateForm() {
                 `<option value="${g.id}">Galpón #${g.nro_galpon} (${g.capacidad})</option>`,
             )
             .join("");
-          // Auto focus al select para fluidez
           selectGalpon.focus();
         } else {
           selectGalpon.innerHTML =
@@ -298,24 +429,128 @@ async function showCreateForm() {
     };
 
     box.querySelector("#btn-cancel").onclick = () => modal.hide();
+
     box.querySelector("form").onsubmit = async (e) => {
       e.preventDefault();
-      // Validar galpon
+
+      let granjaId = inpGranjaId.value;
+      let galponId = selectGalpon.value;
+
+      // Si está en modo nueva granja, crearla antes de continuar
+      if (isNewGranjaMode) {
+        const payload = {
+          ubicacion: {
+            nombre: box.querySelector("#g-nombre").value,
+            direccion: {
+              pais: "Venezuela",
+              estado: box.querySelector("#g-est").value,
+              municipio: box.querySelector("#g-mun").value,
+              sector: box.querySelector("#g-sec").value,
+              descripcion: box.querySelector("#g-desc").value,
+            },
+          },
+          rif: {
+            tipo: box.querySelector("#g-rif-tipo").value,
+            numero: box.querySelector("#g-rif-num").value,
+          },
+          persona: {
+            cedula: box.querySelector("#resp-cedula").value,
+            tipo_cedula: box.querySelector("#resp-tipo-cedula").value,
+            nombre: box.querySelector("#resp-nombre").value,
+            apellido: box.querySelector("#resp-apellido").value,
+            direccion: {
+              estado: "N/A",
+              municipio: "N/A",
+              sector: "N/A",
+              pais: "Venezuela",
+            },
+          },
+          telefonos: [
+            {
+              tipo: box.querySelector("#g-ph-tipo").value,
+              codigo_pais: box.querySelector("#g-ph-pais").value,
+              operadora: box.querySelector("#g-ph-area").value,
+              numero: box.querySelector("#g-ph-num").value,
+            },
+          ],
+        };
+        try {
+          const res = await createGranjaCombined(payload);
+          // Recargar granjas y galpones
+          const [resGranjas, resGalpones] = await Promise.all([
+            listResource("granjas"),
+            listResource("galpones"),
+          ]);
+          granjas = resGranjas.data.items || resGranjas.data;
+          galpones = resGalpones.data.items || resGalpones.data;
+          const nueva = res.data.granja || res.data;
+          granjaId = nueva.id;
+          inputGranja.value = `${nueva.ubicacion?.nombre}`;
+          inpGranjaId.value = nueva.id;
+          secNewGranja.style.display = "none";
+          inputGranja.required = true;
+          isNewGranjaMode = false;
+          alert("Granja registrada exitosamente.");
+        } catch (x) {
+          console.error(x);
+          alert(
+            "Error al crear granja: " + (x.response?.data?.error || x.message),
+          );
+          return;
+        }
+      }
+
+      // Si está en modo nuevo galpón, crearlo antes de continuar
+      if (isNewGalponMode) {
+        if (!granjaId) {
+          alert("Debe seleccionar o crear una granja primero.");
+          return;
+        }
+        const payload = {
+          id_granja: Number(granjaId),
+          nro_galpon: parseInt(box.querySelector("#fg-nro").value),
+          capacidad: parseInt(box.querySelector("#fg-cap").value),
+        };
+        try {
+          const res = await createResource("galpones", payload);
+          // Recargar galpones
+          const resGalpones = await listResource("galpones");
+          galpones = resGalpones.data.items || resGalpones.data;
+          const nuevoGalpon = res.data.galpon || res.data;
+          galponId = nuevoGalpon.id;
+          selectGalpon.innerHTML = `<option value="${galponId}">Galpón #${nuevoGalpon.nro_galpon} (${nuevoGalpon.capacidad})</option>`;
+          selectGalpon.value = galponId;
+          selectGalpon.disabled = false;
+          selectGalpon.style.backgroundColor = "#fff";
+          secNewGalpon.style.display = "none";
+          selectGalpon.required = true;
+          isNewGalponMode = false;
+          alert("Galpón registrado exitosamente.");
+        } catch (x) {
+          console.error(x);
+          alert(
+            "Error al crear galpón: " + (x.response?.data?.error || x.message),
+          );
+          return;
+        }
+      }
+
+      // Validar galpón
       if (!selectGalpon.value) {
         alert("Selecciona un galpón");
         return;
       }
 
       const payload = {
-        codigo_lote: document.getElementById("l-codigo").value,
-        id_galpones: parseInt(selectGalpon.value), // Valor final
-        fecha_alojamiento: document.getElementById("l-fecha").value,
-        cantidad_aves: parseInt(document.getElementById("l-cantidad").value),
+        codigo_lote: box.querySelector("#l-codigo").value,
+        id_galpones: parseInt(selectGalpon.value),
+        fecha_alojamiento: box.querySelector("#l-fecha").value,
+        cantidad_aves: parseInt(box.querySelector("#l-cantidad").value),
       };
       try {
         await createLoteCombined(payload);
         modal.hide();
-        loadTable(); // Usar loadTable en lugar de load() que no existe
+        loadTable();
       } catch (err) {
         alert(
           "Error al crear lote: " + (err.response?.data?.error || err.message),

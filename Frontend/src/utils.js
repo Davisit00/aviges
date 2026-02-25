@@ -36,6 +36,10 @@ export const ENDPOINTS = {
   TICKETS_PESAJE_REGISTRAR_PESO: "/tickets_pesaje/registrar_peso",
   TICKETS_PESAJE_IMPRIMIR: "/tickets_pesaje", // /:id/imprimir
   TICKETS_PESAJE_NOTA_ENTREGA: "/tickets_pesaje", // /:id/nota_entrega
+
+  // Reportes
+  REPORTE_TRANSPORTE_AVES: "/reporte_transporte_aves_sql",
+  REPORTE_GRANJA: "/reporte_granja_dia",
 };
 
 export const COUNTRY_CODES = [

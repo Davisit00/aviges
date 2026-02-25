@@ -647,47 +647,26 @@ function showSecondWeighModal(ticket) {
 }
 
 function showNotaEntregaModal(ticketId) {
-  modal.show(
-    "Registrar Nota de Entrega",
-    `
+  // Cargar lista de lotes
+  listResource("lotes").then((resLotes) => {
+    const lotes = resLotes.data.items || resLotes.data;
+    const dlLotes = lotes
+      .map((l) => `<option value="${l.codigo_lote} [ID:${l.id}]"></option>`)
+      .join("");
+
+    const html = `
       <form id="form-nota">
+        <div class="form-group">
+          <label>Lote</label>
+          <input list="dl-lotes" id="nota-lote-input" placeholder="Buscar lote..." style="width:100%">
+          <datalist id="dl-lotes">${dlLotes}</datalist>
+          <input type="hidden" id="nota-lote-id">
+        </div>
+        <div class="form-group">
+          <label>Nro de Orden</label>
+          <input type="text" id="nota-nro-orden" placeholder="Número de orden" required>
+        </div>
         <div style="max-height: 600px; overflow-y: auto; padding-right:5px;">
-          <h4 style="margin-bottom:10px;">Datos de Origen</h4>
-          <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-            <div>
-              <label>ID Lote (opcional)</label>
-              <input type="number" id="id_lote">
-            </div>
-            <div>
-              <label>Número de Orden</label>
-              <input type="text" id="numero_de_orden" required>
-            </div>
-          </div>
-          <div class="form-group" style="margin-top:10px; background:#f8f8f8; padding:10px; border-radius:5px;">
-            <h5 style="margin-bottom:5px;">Datos de Lote (si no hay ID)</h5>
-            <input type="text" id="lote_codigo" placeholder="Código Lote">
-            <input type="date" id="lote_fecha_alojamiento" placeholder="Fecha Alojamiento">
-            <input type="number" id="lote_cantidad_aves" placeholder="Cantidad Aves">
-            <h5 style="margin:10px 0 5px 0;">Galpón</h5>
-            <input type="number" id="galpon_id">
-            <input type="text" id="galpon_nro" placeholder="Nro Galpón">
-            <input type="number" id="galpon_capacidad" placeholder="Capacidad">
-            <h5 style="margin:10px 0 5px 0;">Granja</h5>
-            <input type="number" id="granja_id">
-            <input type="text" id="granja_nombre" placeholder="Nombre Granja">
-            <input type="number" id="granja_id_persona_responsable" placeholder="ID Persona Responsable">
-            <h5 style="margin:10px 0 5px 0;">Ubicación</h5>
-            <input type="number" id="ubicacion_id">
-            <input type="text" id="ubicacion_nombre" placeholder="Nombre Ubicación">
-            <input type="text" id="ubicacion_tipo" placeholder="Tipo Ubicación">
-            <h5 style="margin:10px 0 5px 0;">Dirección</h5>
-            <input type="number" id="direccion_id">
-            <input type="text" id="direccion_pais" placeholder="País">
-            <input type="text" id="direccion_estado" placeholder="Estado">
-            <input type="text" id="direccion_municipio" placeholder="Municipio">
-            <input type="text" id="direccion_sector" placeholder="Sector">
-            <input type="text" id="direccion_descripcion" placeholder="Descripción">
-          </div>
           <hr>
           <h4 style="margin-bottom:10px;">Datos de Conteo</h4>
           <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
@@ -727,10 +706,6 @@ function showNotaEntregaModal(ticketId) {
               <label>Hora Inicio Descarga</label>
               <input type="datetime-local" id="hora_inicio_descarga" required>
             </div>
-            <div>
-              <label>Hora Fin Descarga</label>
-              <input type="datetime-local" id="hora_fin_descarga" required>
-            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -738,87 +713,33 @@ function showNotaEntregaModal(ticketId) {
           <button type="button" class="btn-secondary" id="btn-cancel">Cancelar</button>
         </div>
       </form>
-    `,
-    (box) => {
+    `;
+
+    modal.show("Registrar Nota de Entrega", html, (box) => {
       box.querySelector("#btn-cancel").onclick = () => modal.hide();
+
+      box.querySelector("#nota-lote-input").onchange = () => {
+        const val = box.querySelector("#nota-lote-input").value;
+        const match = lotes.find(
+          (l) => `${l.codigo_lote} [ID:${l.id}]` === val,
+        );
+        box.querySelector("#nota-lote-id").value = match ? match.id : "";
+      };
+
       box.querySelector("form").onsubmit = async (e) => {
         e.preventDefault();
+        const loteId = box.querySelector("#nota-lote-id").value;
+        const nroOrden = box.querySelector("#nota-nro-orden").value.trim();
 
-        // --- Origen anidado, solo incluye si hay datos ---
-        const direccion = {};
-        const direccionIdInput = box.querySelector("#direccion_id");
-        if (direccionIdInput && direccionIdInput.value)
-          direccion.id = parseInt(direccionIdInput.value, 10);
-        if (box.querySelector("#direccion_pais")?.value)
-          direccion.pais = box.querySelector("#direccion_pais").value;
-        if (box.querySelector("#direccion_estado")?.value)
-          direccion.estado = box.querySelector("#direccion_estado").value;
-        if (box.querySelector("#direccion_municipio")?.value)
-          direccion.municipio = box.querySelector("#direccion_municipio").value;
-        if (box.querySelector("#direccion_sector")?.value)
-          direccion.sector = box.querySelector("#direccion_sector").value;
-        if (box.querySelector("#direccion_descripcion")?.value)
-          direccion.descripcion = box.querySelector(
-            "#direccion_descripcion",
-          ).value;
+        if (!loteId) {
+          alert("Selecciona un lote válido");
+          return;
+        }
 
-        const ubicacion = {};
-        const ubicacionIdInput = box.querySelector("#ubicacion_id");
-        if (ubicacionIdInput && ubicacionIdInput.value)
-          ubicacion.id = parseInt(ubicacionIdInput.value, 10);
-        if (box.querySelector("#ubicacion_nombre")?.value)
-          ubicacion.nombre = box.querySelector("#ubicacion_nombre").value;
-        if (box.querySelector("#ubicacion_tipo")?.value)
-          ubicacion.tipo = box.querySelector("#ubicacion_tipo").value;
-        if (Object.keys(direccion).length > 0) ubicacion.direccion = direccion;
-
-        const granja = {};
-        const granjaIdInput = box.querySelector("#granja_id");
-        if (granjaIdInput && granjaIdInput.value)
-          granja.id = parseInt(granjaIdInput.value, 10);
-        if (box.querySelector("#granja_nombre").value)
-          granja.nombre = box.querySelector("#granja_nombre").value;
-        if (box.querySelector("#granja_id_persona_responsable").value)
-          granja.id_persona_responsable = parseInt(
-            box.querySelector("#granja_id_persona_responsable").value,
-            10,
-          );
-        if (Object.keys(ubicacion).length > 0) granja.ubicacion = ubicacion;
-
-        const galpon = {};
-        if (box.querySelector("#galpon_id").value)
-          galpon.id = parseInt(box.querySelector("#galpon_id").value, 10);
-        if (box.querySelector("#galpon_nro").value)
-          galpon.nro_galpon = box.querySelector("#galpon_nro").value;
-        if (box.querySelector("#galpon_capacidad").value)
-          galpon.capacidad = parseInt(
-            box.querySelector("#galpon_capacidad").value,
-            10,
-          );
-        if (Object.keys(granja).length > 0) galpon.granja = granja;
-
-        const lote = {};
-        if (box.querySelector("#lote_codigo").value)
-          lote.codigo_lote = box.querySelector("#lote_codigo").value;
-        if (box.querySelector("#lote_fecha_alojamiento").value)
-          lote.fecha_alojamiento = box.querySelector(
-            "#lote_fecha_alojamiento",
-          ).value;
-        if (box.querySelector("#lote_cantidad_aves").value)
-          lote.cantidad_aves = parseInt(
-            box.querySelector("#lote_cantidad_aves").value,
-            10,
-          );
-        if (box.querySelector("#id_lote").value)
-          lote.id = parseInt(box.querySelector("#id_lote").value, 10);
-        if (Object.keys(galpon).length > 0) lote.galpon = galpon;
-
-        const origen = {};
-        if (box.querySelector("#id_lote").value)
-          origen.id_lote = parseInt(box.querySelector("#id_lote").value, 10);
-        if (box.querySelector("#numero_de_orden").value)
-          origen.numero_de_orden = box.querySelector("#numero_de_orden").value;
-        if (Object.keys(lote).length > 0) origen.lote = lote;
+        if (!nroOrden) {
+          alert("Número de orden no definido para este ticket");
+          return;
+        }
 
         const data = {
           conteos: {
@@ -844,17 +765,17 @@ function showNotaEntregaModal(ticketId) {
           hora_salida_granja: box.querySelector("#hora_salida_granja").value,
           hora_inicio_descarga: box.querySelector("#hora_inicio_descarga")
             .value,
-          hora_fin_descarga: box.querySelector("#hora_fin_descarga").value,
-          origen: Object.keys(origen).length > 0 ? origen : undefined,
+          origen: { id_lote: parseInt(loteId, 10), numero_de_orden: nroOrden },
         };
 
         try {
           await saveNotaEntrega(ticketId, data);
           modal.hide();
+          await loadTickets(); // <-- Agrega esta línea para refrescar la tabla
         } catch (err) {
           alert("Error guardando nota de entrega");
         }
       };
-    },
-  );
+    });
+  });
 }

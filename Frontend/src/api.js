@@ -110,3 +110,13 @@ export const saveNotaEntrega = (ticketId, data) =>
 // Obtener nota de entrega (GET)
 export const getNotaEntrega = (ticketId) =>
   api.get(`${ENDPOINTS.TICKETS_PESAJE_NOTA_ENTREGA}/${ticketId}/nota_entrega`);
+
+// recibe una una fecha para conseguir el diario o 2 para conseguir un rango de fechas
+// fecha o fecha_inicio y fecha_fin
+export const getReporteTransporteAves = (params) =>
+  api.get(ENDPOINTS.REPORTE_TRANSPORTE_AVES, { params });
+
+// recibe una granja y una fecha para conseguir el reporte de esa granja en ese día o un rango de fechas
+// id_granja y fecha o fecha_inicio y fecha_fin
+export const getReporteGranja = (params) =>
+  api.get(ENDPOINTS.REPORTE_GRANJA, { params });
