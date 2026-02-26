@@ -10,6 +10,9 @@ import { init as initLotes } from "./lotes.js";
 import { init as initWelcome } from "./welcome.js";
 import { init as initUbicaciones } from "./ubicaciones.js"; // IMPORTA EL NUEVO ARCHIVO
 import { init as initTickets } from "./ticketsPesaje.js"; // IMPORTA EL NUEVO ARCHIVO
+import { init as initTicketPesajePrint } from "./ticketPesajePrint.js"; // IMPORTA EL NUEVO ARCHIVO
+import { init as initTransporteAves } from "./transporteAves.js"; // IMPORTA EL NUEVO ARCHIVO
+import { init as initReporteGranja } from "./granjaDia.js"; // IMPORTA EL NUEVO ARCHIVO
 
 // Constante para la clave del storage
 const STORAGE_KEY_VIEW = "aviges_active_view";
@@ -27,6 +30,9 @@ const VIEW_MAP = {
   lotes: initLotes,
   ubicaciones: initUbicaciones, // REGISTRAR AQUI
   tickets: initTickets, // REGISTRAR AQUI
+  ticketPrint: initTicketPesajePrint, // REGISTRAR AQUI
+  transportDetails: initTransporteAves, // REGISTRAR AQUI
+  reporteGranja: initReporteGranja, // REGISTRAR AQUI
 };
 
 let currentUserRole = null;
@@ -52,6 +58,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   const btnVehiculos = document.getElementById("vehicles-button");
   const btnChoferes = document.getElementById("drivers-button");
   const btnEmpresas = document.getElementById("transport-companies-button");
+  const btnPrintTicket = document.getElementById("ticket-print-button"); // NUEVO BOTON
+  const btnTransportDetails = document.getElementById(
+    "transport-details-button",
+  ); // NUEVO BOTON
+  const btnGranjasTransporte = document.getElementById(
+    "farm-transport-details-button",
+  ); // NUEVO BOTON
   const btnGranjas = document.getElementById("farms-button");
   const btnGalpones = document.getElementById("barns-button");
   const btnUsuarios = document.getElementById("users-button");
@@ -118,6 +131,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (btnVehiculos) btnVehiculos.onclick = () => navigate("vehiculos");
   if (btnChoferes) btnChoferes.onclick = () => navigate("choferes");
   if (btnEmpresas) btnEmpresas.onclick = () => navigate("empresas");
+  if (btnPrintTicket) btnPrintTicket.onclick = () => navigate("ticketPrint"); // NUEVO BOTON
+  if (btnTransportDetails)
+    btnTransportDetails.onclick = () => navigate("transportDetails"); // NUEVO BOTON
+  if (btnGranjasTransporte)
+    btnGranjasTransporte.onclick = () => navigate("reporteGranja"); // NUEVO BOTON
   if (btnGranjas) btnGranjas.onclick = () => navigate("granjas");
   if (btnGalpones) btnGalpones.onclick = () => navigate("galpones");
   if (btnLotes) btnLotes.onclick = () => navigate("lotes");

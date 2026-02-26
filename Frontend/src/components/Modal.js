@@ -43,7 +43,11 @@ export class Modal {
 
     // Cerrar al hacer clic fuera del contenido (overlay)
     this.overlay.onclick = (e) => {
-      if (e.target === this.overlay) this.hide();
+      if (
+        e.target === this.overlay &&
+        confirm("¿Estás seguro de que quieres cerrar esta ventana?")
+      )
+        this.hide();
     };
   }
 

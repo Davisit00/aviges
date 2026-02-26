@@ -1595,16 +1595,13 @@ def reimprimir_ticket(ticket_id):
     from sqlalchemy import text
     try:
         ticket = TicketPesaje.query.get_or_404(ticket_id)
-        db.session.execute(
-            text("UPDATE Ticket_pesaje SET reimpresiones = reimpresiones + 1 WHERE id = :id"),
-            {"id": ticket_id}
-        )
-        db.session.commit()
         ticket.reimpresiones += 1
+        db.session.commit()
         return jsonify({"status": "ok", "reimpresiones": ticket.reimpresiones})
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+    
 @api_bp.route("/reporte_transporte_aves_sql", methods=["GET"])
 @jwt_required()
 def reporte_transporte_aves_sql():
@@ -1616,32 +1613,32 @@ def reporte_transporte_aves_sql():
     fecha_fin = request.args.get("fecha_fin")
     fecha = request.args.get("fecha")
 
-    # Usamos DISTINCT para evitar filas duplicadas causadas por relaciones uno-a-muchos
-    # COALESCE asegura que si un valor es NULL, devuelva 0 o un string vacío para evitar errores
+    # Usamos GROUP BY para colapsar cualquier duplicado por ticket
+    # Usamos MAX() en las tablas relacionadas para traer el registro más reciente/relevante
     sql = """
-    SELECT DISTINCT
+    SELECT 
         tp.nro_ticket,
-        tp.estado,
-        v.placa,
-        CONCAT(p.nombre, ' ', p.apellido) AS chofer,
-        vt.hora_salida_granja,
-        vt.hora_llegada_romana,
-        vt.tiempo_transito AS tiempo_recorrido,
-        vt.hora_inicio_descarga AS hora_inicio_proceso,
-        vt.tiempo_espera,
-        u.nombre AS granja,
-        vc.aves_recibidas AS aves_contadas,
-        vc.aves_faltantes,
-        COALESCE(e.porcentaje_aves_faltantes, 0) AS porcentaje_aves_faltantes,
-        COALESCE(tp.peso_neto, 0) AS kilos_netos,
-        COALESCE(e.peso_promedio_aves, 0) AS peso_promedio,
-        vc.aves_aho AS aves_ahogadas,
-        COALESCE(e.porcentaje_aves_ahogadas, 0) AS porcentaje_aves_ahogadas,
-        vc.numero_de_jaulas,
-        vc.aves_por_jaula,
-        g.nro_galpon AS numero_galpon,
-        l.fecha_alojamiento,
-        DATEDIFF(day, l.fecha_alojamiento, vt.hora_llegada_romana) AS edad_aves
+        MAX(tp.estado) AS estado,
+        MAX(v.placa) AS placa,
+        MAX(CONCAT(p.nombre, ' ', p.apellido)) AS chofer,
+        MAX(vt.hora_salida_granja) AS hora_salida_granja,
+        MAX(vt.hora_llegada_romana) AS hora_llegada_romana,
+        MAX(vt.tiempo_transito) AS tiempo_recorrido,
+        MAX(vt.hora_inicio_descarga) AS hora_inicio_proceso,
+        MAX(vt.tiempo_espera) AS tiempo_espera,
+        MAX(u.nombre) AS granja,
+        MAX(vc.aves_recibidas) AS aves_contadas,
+        MAX(vc.aves_faltantes) AS aves_faltantes,
+        MAX(ISNULL(e.porcentaje_aves_faltantes, 0)) AS porcentaje_aves_faltantes,
+        MAX(ISNULL(tp.peso_neto, 0)) AS kilos_netos,
+        MAX(ISNULL(e.peso_promedio_aves, 0)) AS peso_promedio,
+        MAX(vc.aves_aho) AS aves_ahogadas,
+        MAX(ISNULL(e.porcentaje_aves_ahogadas, 0)) AS porcentaje_aves_ahogadas,
+        MAX(vc.numero_de_jaulas) AS numero_jaulas,
+        MAX(vc.aves_por_jaula) AS aves_por_jaula,
+        MAX(g.nro_galpon) AS numero_galpon,
+        MAX(l.fecha_alojamiento) AS fecha_alojamiento,
+        MAX(DATEDIFF(day, l.fecha_alojamiento, vt.hora_llegada_romana)) AS edad_aves
     FROM Ticket_pesaje tp
     LEFT JOIN Asignaciones a ON tp.id_asignaciones = a.id
     LEFT JOIN Vehiculos v ON a.id_vehiculos = v.id
@@ -1667,14 +1664,13 @@ def reporte_transporte_aves_sql():
         sql += " AND CAST(vt.hora_llegada_romana AS DATE) = :fecha"
         params["fecha"] = fecha
 
-    # Ordenar por fecha de llegada para mantener consistencia
-    sql += " ORDER BY vt.hora_llegada_romana DESC"
+    # Agrupamos por el número de ticket para asegurar unicidad
+    sql += " GROUP BY tp.nro_ticket ORDER BY MAX(vt.hora_llegada_romana) DESC"
 
     try:
         result = db.session.execute(text(sql), params)
         data = []
         
-        # .mappings() devuelve cada fila como un diccionario para acceso seguro
         for r in result.mappings():
             data.append({
                 "nro_ticket": r["nro_ticket"],
@@ -1694,7 +1690,7 @@ def reporte_transporte_aves_sql():
                 "peso_promedio": float(r["peso_promedio"]),
                 "aves_ahogadas": r["aves_ahogadas"] or 0,
                 "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]),
-                "numero_jaulas": r["numero_de_jaulas"] or 0,
+                "numero_jaulas": r["numero_jaulas"] or 0,
                 "aves_por_jaula": r["aves_por_jaula"] or 0,
                 "numero_galpon": r["numero_galpon"] or "N/A",
                 "fecha_alojamiento": str(r["fecha_alojamiento"]) if r["fecha_alojamiento"] else None,
@@ -1704,9 +1700,7 @@ def reporte_transporte_aves_sql():
         return jsonify(data), 200
 
     except Exception as e:
-        # Esto te ayudará a ver el error real en los logs de la consola
-        print(f"Error Reporte: {str(e)}")
-        return jsonify({"error": "Error interno al procesar el reporte", "details": str(e)}), 500
+        return jsonify({"error": "Error en el reporte", "details": str(e)}), 500
     
 @api_bp.route("/reporte_granja_dia", methods=["GET"])
 @jwt_required()
