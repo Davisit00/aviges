@@ -1,6 +1,6 @@
 // No se usa
 
-export const API_URL = "http://127.0.0.1:5000/api/";
+export const API_URL = "http://192.168.2.107:5000/api/";
 
 export const ENDPOINTS = {
   // Auth
@@ -100,7 +100,7 @@ export function getSearchInputHTML(id, placeholder = "Buscar...") {
   return `
       <div class="search-container" style="margin-bottom: 15px;">
         <input type="text" id="${id}" placeholder="${placeholder}" 
-               style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px;">
+               style="width: 100%; padding: 10px; border: 1px solid #bbb; border-radius: 10px; font-size: 14px;">
       </div>
     `;
 }

@@ -1,5 +1,5 @@
 // Usamos la URL CDN compatible con ES Modules para navegadores
-import axios from "https://cdn.jsdelivr.net/npm/axios@1.7.2/+esm";
+import axios from "../node_modules/axios/dist/esm/axios.js";
 // Agregamos la extensión .js a la importación local
 import { API_URL, ENDPOINTS } from "./utils.js";
 

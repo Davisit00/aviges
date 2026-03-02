@@ -7,6 +7,15 @@ let granjasList = [];
 export async function init(container) {
   await cargarGranjas();
 
+  /*Dejar en caso de querer búsqueda por rango de fechas en lugar de fecha específica
+        <label>Desde:
+          <input type="date" id="fecha_inicio" name="fecha_inicio">
+        </label>
+        <label>Hasta:
+          <input type="date" id="fecha_fin" name="fecha_fin">
+        </label>
+  */
+
   container.innerHTML = `
     <div class="header-section">
       <h2>Reporte Diario de Granja</h2>
@@ -25,14 +34,9 @@ export async function init(container) {
         <label>Fecha:
           <input type="date" id="fecha" name="fecha">
         </label>
-        <label>Desde:
-          <input type="date" id="fecha_inicio" name="fecha_inicio">
-        </label>
-        <label>Hasta:
-          <input type="date" id="fecha_fin" name="fecha_fin">
-        </label>
-        <button type="submit" class="btn-primary">Buscar</button>
-        <button type="button" id="btn-imprimir" class="btn-primary" style="background:#2196F3;">Imprimir</button>
+        
+        <button type="submit" class="btn-primary" style="margin:0">Buscar</button>
+        <button type="button" id="btn-imprimir" class="btn-primary" style="margin:0">Imprimir</button>
       </form>
       <div id="reporte-resumen"></div>
       <div class="table-container" style="overflow-x:auto;">
@@ -63,8 +67,8 @@ async function cargarGranjas() {
 async function cargarReporte() {
   const id_ubicacion = document.getElementById("id_ubicacion").value;
   const fecha = document.getElementById("fecha").value;
-  const fecha_inicio = document.getElementById("fecha_inicio").value;
-  const fecha_fin = document.getElementById("fecha_fin").value;
+  const fecha_inicio = document.getElementById("fecha_inicio")?.value || "";
+  const fecha_fin = document.getElementById("fecha_fin")?.value || "";
 
   if (!id_ubicacion) {
     alert("Seleccione una granja.");
@@ -142,6 +146,7 @@ function renderTable(data) {
 }
 
 function imprimirReporte() {
+  const fecha = document.getElementById("fecha").value;
   if (!reporteData.length) {
     alert("No hay datos para imprimir.");
     return;
@@ -150,7 +155,7 @@ function imprimirReporte() {
   let resumenHtml = "";
   if (resumenData) {
     resumenHtml = `
-      <div style="margin-bottom:10px;">
+      <div style="margin-bottom:10px; font-size:14px;">
         <b>Total Aves:</b> ${resumenData.total_aves || 0} &nbsp; | &nbsp;
         <b>Total Peso Neto:</b> ${resumenData.total_peso_neto || 0} kg &nbsp; | &nbsp;
         <b>Peso Promedio:</b> ${Number(resumenData.peso_promedio || 0).toFixed(2)} kg
@@ -169,7 +174,7 @@ function imprimirReporte() {
       </style>
     </head>
     <body>
-      <h2 style="text-align:center;">Reporte Diario de Granja</h2>
+      <h2 style="text-align:center;">Reporte Diario de Granja ${fecha || "Sin Fecha"}</h2>
       ${resumenHtml}
       <table>
         <thead>

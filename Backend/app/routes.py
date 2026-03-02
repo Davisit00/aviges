@@ -24,9 +24,18 @@ api_bp = Blueprint("api", __name__)
 
 @api_bp.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    origin = request.headers.get("Origin")
+    allowed = {
+        "http://192.168.2.107",        # XAMPP en LAN
+        "http://192.168.2.107:80",
+        "http://localhost",
+        "http://127.0.0.1",
+    }
+    if origin in allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Vary"] = "Origin"
     return response
 
 MODEL_MAP = { 
@@ -440,11 +449,13 @@ def validate_token():
     return jsonify({"valid": True, "user_id": user_id, "user_rol": user_rol})
 
 @api_bp.route("/auth/logout", methods=["POST"])
-@jwt_required()
+@jwt_required(optional=True)
 def logout():
-    jti = get_jwt()["jti"]
-    jwt_blocklist.add(jti)
-    return jsonify({"logged_out": True})
+    claims = get_jwt() or {}
+    jti = claims.get("jti")
+    if jti:
+        jwt_blocklist.add(jti)
+    return jsonify({"logged_out": True}), 200
 
 # ---------- COMBINED ENDPOINTS ----------
 

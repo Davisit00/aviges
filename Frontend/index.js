@@ -24,12 +24,20 @@ function LoginHandler(event) {
       window.location.href = "src/pages/core.html";
     })
     .catch((error) => {
-      console.error("Login error:", error);
-      alert("Login failed. Please check your credentials.");
+      console.error("Login error message:", error.message);
+      console.error("Login error code:", error.code);
+      console.error(
+        "Login error response:",
+        error.response?.status,
+        error.response?.data,
+      );
+      alert("Login failed. Revisa consola.");
     });
 }
 
 // Wait for DOM to be ready before attaching event listeners
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("login-button").addEventListener("click", LoginHandler);
+  document
+    .getElementById("login-button")
+    .addEventListener("click", LoginHandler);
 });

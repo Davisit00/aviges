@@ -82,7 +82,7 @@ function showCreateModal() {
         // Código temporal, el backend lo genera mejor
         await createResource("productos", { nombre: nombre, codigo: "TEMP" });
         modal.hide();
-        loadData();
+        loadTable();
       } catch (error) {
         alert("Error creando producto: " + error.message);
       }
@@ -93,6 +93,6 @@ function showCreateModal() {
 async function handleDelete(id) {
   if (confirm("¿Estás seguro de eliminar este producto?")) {
     await deleteResource("productos", id);
-    loadData();
+    loadTable();
   }
 }

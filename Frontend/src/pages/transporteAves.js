@@ -23,28 +23,26 @@ export async function init(container) {
         <table id="reporte-table">
           <thead>
             <tr>
-              <th>Ticket</th>
-              <th>Estado</th>
               <th>Placa</th>
               <th>Chofer</th>
-              <th>Granja</th>
-              <th>Galpón</th>
-              <th>Fecha Alojamiento</th>
-              <th>Edad Aves</th>
-              <th>Salida Granja</th>
-              <th>Llegada Romana</th>
-              <th>Inicio Proceso</th>
-              <th>Tiempo Recorrido</th>
-              <th>Tiempo Espera</th>
-              <th>Aves Contadas</th>
-              <th>Aves Faltantes</th>
-              <th>% Faltantes</th>
-              <th>Aves Ahogadas</th>
-              <th>% Ahogadas</th>
-              <th>Jaulas</th>
-              <th>Aves/Jaula</th>
-              <th>Kilos Netos</th>
-              <th>Peso Promedio</th>
+              <th>H. Sal Gja</th>
+              <th>H. Entra Rom</th>
+              <th>Tiem rec</th>
+              <th>Hora Inic</th>
+              <th>Tmpo espera</th>
+              <th>Granjas</th>
+              <th>Aves trans</th>
+              <th>Aves cont</th>
+              <th>Falt/Sobr</th>
+              <th>%</th>
+              <th>Kgs</th>
+              <th>Peso Prom</th>
+              <th>Aves aho</th>
+              <th>%</th>
+              <th>N Jau</th>
+              <th>A jau</th>
+              <th>Galp</th>
+              <th>Edad</th>
             </tr>
           </thead>
           <tbody id="reporte-tbody"></tbody>
@@ -90,35 +88,33 @@ function renderTable(data) {
   const tbody = document.getElementById("reporte-tbody");
   if (!tbody) return;
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="22" style="text-align:center;">No hay datos para mostrar.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="20" style="text-align:center;">No hay datos para mostrar.</td></tr>`;
     return;
   }
   tbody.innerHTML = data
     .map(
       (r) => `
       <tr>
-        <td>${r.nro_ticket || ""}</td>
-        <td>${r.estado || ""}</td>
         <td>${r.placa || ""}</td>
         <td>${r.chofer || ""}</td>
-        <td>${r.granja || ""}</td>
-        <td>${r.numero_galpon || ""}</td>
-        <td>${r.fecha_alojamiento || ""}</td>
-        <td>${r.edad_aves || ""}</td>
         <td>${r.hora_salida_granja ? r.hora_salida_granja.substring(0, 16).replace("T", " ") : ""}</td>
         <td>${r.hora_llegada_romana ? r.hora_llegada_romana.substring(0, 16).replace("T", " ") : ""}</td>
-        <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
         <td>${r.tiempo_recorrido || ""}</td>
+        <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
         <td>${r.tiempo_espera || ""}</td>
+        <td>${r.granja || ""}</td>
+        <td>${r.aves_contadas !== undefined ? r.aves_contadas + (r.aves_faltantes !== undefined ? r.aves_faltantes : 0) : ""}</td>
         <td>${r.aves_contadas || ""}</td>
         <td>${r.aves_faltantes || ""}</td>
         <td>${Number(r.porcentaje_aves_faltantes || 0).toFixed(2)}%</td>
+        <td>${r.kilos_netos || ""}</td>
+        <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
         <td>${r.aves_ahogadas || ""}</td>
         <td>${Number(r.porcentaje_aves_ahogadas || 0).toFixed(2)}%</td>
         <td>${r.numero_jaulas || ""}</td>
         <td>${r.aves_por_jaula || ""}</td>
-        <td>${r.kilos_netos || ""}</td>
-        <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
+        <td>${r.numero_galpon || ""}</td>
+        <td>${r.edad_aves || ""}</td>
       </tr>
     `,
     )
@@ -133,7 +129,7 @@ function imprimirReporte() {
       <style>
         body { font-family: sans-serif; font-size: 12px; }
         table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #333; padding: 4px 6px; }
+        th, td { border: 1px solid #333; padding: 4px 6px; width: fit-content; }
         th { background: #eee; }
       </style>
     </head>
@@ -142,28 +138,26 @@ function imprimirReporte() {
       <table>
         <thead>
           <tr>
-            <th>Ticket</th>
-            <th>Estado</th>
             <th>Placa</th>
             <th>Chofer</th>
-            <th>Granja</th>
-            <th>Galpón</th>
-            <th>Fecha Alojamiento</th>
-            <th>Edad Aves</th>
-            <th>Salida Granja</th>
-            <th>Llegada Romana</th>
-            <th>Inicio Proceso</th>
-            <th>Tiempo Recorrido</th>
-            <th>Tiempo Espera</th>
-            <th>Aves Contadas</th>
-            <th>Aves Faltantes</th>
-            <th>% Faltantes</th>
-            <th>Aves Ahogadas</th>
-            <th>% Ahogadas</th>
-            <th>Jaulas</th>
-            <th>Aves/Jaula</th>
-            <th>Kilos Netos</th>
-            <th>Peso Promedio</th>
+            <th>H. Sal Gja</th>
+            <th>H. Entra Rom</th>
+            <th>Tiem rec</th>
+            <th>Hora Inic</th>
+            <th>Tmpo espera</th>
+            <th>Granjas</th>
+            <th>Aves trans</th>
+            <th>Aves cont</th>
+            <th>Falt/Sobr</th>
+            <th>%</th>
+            <th>Kgs</th>
+            <th>Peso Prom</th>
+            <th>Aves aho</th>
+            <th>%</th>
+            <th>N Jau</th>
+            <th>A jau</th>
+            <th>Galp</th>
+            <th>Edad</th>
           </tr>
         </thead>
         <tbody>
@@ -171,28 +165,26 @@ function imprimirReporte() {
             .map(
               (r) => `
             <tr>
-              <td>${r.nro_ticket || ""}</td>
-              <td>${r.estado || ""}</td>
               <td>${r.placa || ""}</td>
               <td>${r.chofer || ""}</td>
-              <td>${r.granja || ""}</td>
-              <td>${r.numero_galpon || ""}</td>
-              <td>${r.fecha_alojamiento || ""}</td>
-              <td>${r.edad_aves || ""}</td>
               <td>${r.hora_salida_granja ? r.hora_salida_granja.substring(0, 16).replace("T", " ") : ""}</td>
               <td>${r.hora_llegada_romana ? r.hora_llegada_romana.substring(0, 16).replace("T", " ") : ""}</td>
-              <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
               <td>${r.tiempo_recorrido || ""}</td>
+              <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
               <td>${r.tiempo_espera || ""}</td>
+              <td>${r.granja || ""}</td>
+              <td>${r.aves_contadas !== undefined ? r.aves_contadas + (r.aves_faltantes !== undefined ? r.aves_faltantes : 0) : ""}</td>
               <td>${r.aves_contadas || ""}</td>
               <td>${r.aves_faltantes || ""}</td>
               <td>${Number(r.porcentaje_aves_faltantes || 0).toFixed(2)}%</td>
+              <td>${r.kilos_netos || ""}</td>
+              <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
               <td>${r.aves_ahogadas || ""}</td>
               <td>${Number(r.porcentaje_aves_ahogadas || 0).toFixed(2)}%</td>
               <td>${r.numero_jaulas || ""}</td>
               <td>${r.aves_por_jaula || ""}</td>
-              <td>${r.kilos_netos || ""}</td>
-              <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
+              <td>${r.numero_galpon || ""}</td>
+              <td>${r.edad_aves || ""}</td>
             </tr>
           `,
             )

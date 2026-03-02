@@ -38,7 +38,7 @@ export async function init(container) {
     <div class="header-section">
       <h2>Tickets de Pesaje</h2>
       <button id="btn-entrada" class="btn-primary">Registrar ENTRADA</button>
-      <button id="btn-salida" class="btn-primary" style="background:#2196F3;">Registrar SALIDA</button>
+      <button id="btn-salida" class="btn-primary">Registrar SALIDA</button>
     </div>
     <div style="margin-bottom:10px;">
       ${getSearchInputHTML("search-tickets", "Buscar por placa, chofer, producto...")}

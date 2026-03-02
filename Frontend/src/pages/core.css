@@ -238,3 +238,56 @@ button {
   width: 50px;
   height: 50px;
 }
+
+button {
+  border-radius: 8px;
+  width: fit-content;
+  height: auto;
+  padding: 10px 20px;
+}
+
+.btn-primary {
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--text-color);
+  transition: background-color 0.3s ease;
+  border: 1px solid #bbbbbb;
+  margin-bottom: 20px;
+  box-shadow: #33333351 0px 2px 4px;
+}
+
+.btn-primary:hover {
+  cursor: pointer;
+  background-color: #c9c9c9;
+}
+
+.table-container {
+  border: 1px solid #bbbbbb;
+  border-radius: 10px;
+}
+#btn-salida {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+#btn-salida:hover {
+  background-color: #0b7dda;
+}
+#btn-entrada {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+#btn-entrada:hover {
+  background-color: #388e3c;
+}
