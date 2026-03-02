@@ -99,22 +99,22 @@ function renderTable(data) {
         <td>${r.chofer || ""}</td>
         <td>${r.hora_salida_granja ? r.hora_salida_granja.substring(0, 16).replace("T", " ") : ""}</td>
         <td>${r.hora_llegada_romana ? r.hora_llegada_romana.substring(0, 16).replace("T", " ") : ""}</td>
-        <td>${r.tiempo_recorrido || ""}</td>
+        <td>${r.tiempo_recorrido || "0"}</td>
         <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
-        <td>${r.tiempo_espera || ""}</td>
+        <td>${r.tiempo_espera || "0"}</td>
         <td>${r.granja || ""}</td>
-        <td>${r.aves_contadas !== undefined ? r.aves_contadas + (r.aves_faltantes !== undefined ? r.aves_faltantes : 0) : ""}</td>
-        <td>${r.aves_contadas || ""}</td>
-        <td>${r.aves_faltantes || ""}</td>
+        <td>${r.aves_contadas !== undefined ? r.aves_contadas + (r.aves_faltantes !== undefined ? r.aves_faltantes : 0) : "0"}</td>
+        <td>${r.aves_contadas || "0"}</td>
+        <td>${r.aves_faltantes || "0"}</td>
         <td>${Number(r.porcentaje_aves_faltantes || 0).toFixed(2)}%</td>
-        <td>${r.kilos_netos || ""}</td>
+        <td>${r.kilos_netos || "0"}</td>
         <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
-        <td>${r.aves_ahogadas || ""}</td>
+        <td>${r.aves_ahogadas || "0"}</td>
         <td>${Number(r.porcentaje_aves_ahogadas || 0).toFixed(2)}%</td>
-        <td>${r.numero_jaulas || ""}</td>
-        <td>${r.aves_por_jaula || ""}</td>
-        <td>${r.numero_galpon || ""}</td>
-        <td>${r.edad_aves || ""}</td>
+        <td>${r.numero_jaulas || "0"}</td>
+        <td>${r.aves_por_jaula || "0"}</td>
+        <td>${r.numero_galpon || "0"}</td>
+        <td>${r.edad_aves || "0"}</td>
       </tr>
     `,
     )
@@ -169,21 +169,21 @@ function imprimirReporte() {
               <td>${r.chofer || ""}</td>
               <td>${r.hora_salida_granja ? r.hora_salida_granja.substring(0, 16).replace("T", " ") : ""}</td>
               <td>${r.hora_llegada_romana ? r.hora_llegada_romana.substring(0, 16).replace("T", " ") : ""}</td>
-              <td>${r.tiempo_recorrido || ""}</td>
+              <td>${r.tiempo_recorrido || "0"}</td>
               <td>${r.hora_inicio_proceso ? r.hora_inicio_proceso.substring(0, 16).replace("T", " ") : ""}</td>
-              <td>${r.tiempo_espera || ""}</td>
+              <td>${r.tiempo_espera || "0"}</td>
               <td>${r.granja || ""}</td>
               <td>${r.aves_contadas !== undefined ? r.aves_contadas + (r.aves_faltantes !== undefined ? r.aves_faltantes : 0) : ""}</td>
-              <td>${r.aves_contadas || ""}</td>
-              <td>${r.aves_faltantes || ""}</td>
+              <td>${r.aves_contadas || "0"}</td>
+              <td>${r.aves_faltantes || "0"}</td>
               <td>${Number(r.porcentaje_aves_faltantes || 0).toFixed(2)}%</td>
               <td>${r.kilos_netos || ""}</td>
               <td>${Number(r.peso_promedio || 0).toFixed(2)}</td>
-              <td>${r.aves_ahogadas || ""}</td>
+              <td>${r.aves_ahogadas || "0"}</td>
               <td>${Number(r.porcentaje_aves_ahogadas || 0).toFixed(2)}%</td>
-              <td>${r.numero_jaulas || ""}</td>
-              <td>${r.aves_por_jaula || ""}</td>
-              <td>${r.numero_galpon || ""}</td>
+              <td>${r.numero_jaulas || "0"}</td>
+              <td>${r.aves_por_jaula || "0"}</td>
+              <td>${r.numero_galpon || "0"}</td>
               <td>${r.edad_aves || ""}</td>
             </tr>
           `,

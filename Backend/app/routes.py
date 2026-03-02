@@ -1281,19 +1281,29 @@ def create_ticket_pesaje():
     from .models import TicketPesaje, Asignaciones, Ubicaciones
     from . import db
     import uuid
-    import datetime
 
     data = request.get_json(force=True) or {}
 
     data.pop("nro_ticket", None)
     data.pop("peso_neto", None)
+    data.pop("fecha_primer_peso", None)  # ignorar frontend
+
+    # Hora del servidor SQL Server en formato ISO-8601 (string)
+    fecha_sql_iso = db.session.execute(
+        text("SELECT CONVERT(varchar(23), GETDATE(), 126)")
+    ).scalar()
+    data["fecha_primer_peso"] = fecha_sql_iso
+
+    # Asegurar usuario primer peso desde JWT si no viene
+    if not data.get("id_usuarios_primer_peso"):
+        jwt_user_id = get_jwt_identity()
+        data["id_usuarios_primer_peso"] = int(jwt_user_id) if str(jwt_user_id).isdigit() else jwt_user_id
 
     # --- Asignación ---
     id_asignaciones = data.get("id_asignaciones")
     id_vehiculo = data.pop("id_vehiculo", None)
     id_chofer = data.pop("id_chofer", None)
     if not id_asignaciones and id_vehiculo and id_chofer:
-        # Buscar asignación activa
         asignacion = Asignaciones.query.filter_by(
             id_vehiculos=id_vehiculo,
             id_chofer=id_chofer,
@@ -1349,7 +1359,8 @@ def create_ticket_pesaje():
     print("Received data for new ticket:", data)
     ok, err = validate_payload(TicketPesaje, data, partial=False)
     if not ok:
-        return jsonify({"error": err}), 400
+        print("VALIDATION ERROR create_ticket_pesaje:", err, "PAYLOAD:", data)
+        return jsonify({"error": err, "payload": data}), 400
 
     temp_code = f"PEND-{uuid.uuid4().hex[:8]}"
     ticket = TicketPesaje(nro_ticket=temp_code, **data)
@@ -1698,7 +1709,7 @@ def reporte_transporte_aves_sql():
                 "aves_faltantes": r["aves_faltantes"] or 0,
                 "porcentaje_aves_faltantes": float(r["porcentaje_aves_faltantes"]),
                 "kilos_netos": float(r["kilos_netos"]),
-                "peso_promedio": float(r["peso_promedio"]),
+                "peso_promedio": float(r["peso_promedio_aves"]),
                 "aves_ahogadas": r["aves_ahogadas"] or 0,
                 "porcentaje_aves_ahogadas": float(r["porcentaje_aves_ahogadas"]),
                 "numero_jaulas": r["numero_jaulas"] or 0,

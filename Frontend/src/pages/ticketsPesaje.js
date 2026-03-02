@@ -115,14 +115,12 @@ async function printTicket(ticketId) {
   let reimpresiones;
   try {
     response = await getPrintTicketData(ticket.id);
-    reimpresiones = await getReimpresiones(ticket.id);
   } catch (err) {
     alert("Error obteniendo los datos del ticket para imprimir.");
     return;
   }
   const data = {
     ...response.data,
-    reimpresiones: reimpresiones.data.reimpresiones,
   };
   if (!data) {
     alert("No se pudieron obtener los datos del ticket para imprimir.");
@@ -136,7 +134,7 @@ async function printTicket(ticketId) {
     <h3 style="text-align:center; font-size:18px; margin-bottom:10px;">Sucursal: ${data.sucursal || ""}</h3>
     <hr style="height:2px; background:#111;">
     <div style="margin-bottom:8px;">
-      <b>Ticket #:</b> <span style="font-size:20px;">${data.nro_ticket + " - " + data.reimpresiones || ""}</span>
+      <b>Ticket #:</b> <span style="font-size:20px;">${data.nro_ticket || ""}</span>
     </div>
     <div style="margin-bottom:8px;">
       <b>Tipo:</b> <span style="font-size:20px;">${data.tipo_proceso || ""}</span>
@@ -546,7 +544,7 @@ function showTicketForm(tipo) {
         tipo: tipo,
         estado: "En proceso",
         id_usuarios_primer_peso: currentUser.id,
-        fecha_primer_peso: new Date().toISOString(),
+        // fecha_primer_peso: new Date().toISOString(), // quitar
       };
 
       if (tipo === "Entrada") {
